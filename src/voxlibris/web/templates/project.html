@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }} — voxlibris{% endblock %}
+
+{% block breadcrumb %}<nav><a href="/">Projets</a> / {{ project.title }}</nav>{% endblock %}
+
+{% block content %}
+<section class="intro">
+  <h1>{{ project.title }}</h1>
+  <p class="meta">
+    {{ project.author }} · <code>{{ project.kind }}</code>
+    {% if project.needs_review %}<span class="tag warn">relecture nécessaire</span>{% endif %}
+  </p>
+</section>
+
+<div id="progress" data-poll="/projects/{{ name }}/progress" data-interval="2000">
+  {% include "partials/progress.html" %}
+</div>
+
+<section class="steps">
+
+  <article>
+    <h2>1 · Relire</h2>
+    {% if project.needs_review %}
+      <p>Le texte vient d'un OCR. Corrigez chaque chapitre avant de le faire lire.</p>
+    {% else %}
+      <p>Ce format n'exige pas de relecture. Vous pouvez tout de même retoucher le texte.</p>
+    {% endif %}
+    <ul class="chapters">
+      {% for chapter in chapters %}
+      <li>
+        <a href="/projects/{{ name }}/review/{{ chapter.number }}">
+          <span class="num">{{ "%02d"|format(chapter.number) }}</span>
+          {{ chapter.title }}
+        </a>
+        <small>{{ chapter.word_count }} mots</small>
+      </li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article>
+    <h2>2 · Préparer</h2>
+    <p>Découpe le texte en segments, écrit les nombres en lettres et calcule les pauses.</p>
+    <form method="post" action="/projects/{{ name }}/jobs/normalize">
+      <button type="submit" {% if job %}disabled{% endif %}>Préparer les segments</button>
+    </form>
+    {% if status["segments"] %}<p class="done">{{ status["segments"] }} segments prêts.</p>{% endif %}
+  </article>
+
+  <article>
+    <h2>3 · Choisir la voix</h2>
+    <p>Synthétise un même extrait avec plusieurs voix, pour trancher à l'oreille.</p>
+    <form method="post" action="/projects/{{ name }}/jobs/sample">
+      <label><input type="checkbox" name="voice" value="xtts/Viktor Menelaos" checked> XTTS · Viktor Menelaos</label>
+      <label><input type="checkbox" name="voice" value="xtts/Damien Black" checked> XTTS · Damien Black</label>
+      <label><input type="checkbox" name="voice" value="xtts/Tammie Ema"> XTTS · Tammie Ema</label>
+      <label><input type="checkbox" name="voice" value="kokoro/ff_siwis"> Kokoro · ff_siwis</label>
+      <label><input type="checkbox" name="voice" value="piper/fr_FR-tom-medium"> Piper · tom</label>
+      <button type="submit" {% if job or not status["segments"] %}disabled{% endif %}>Comparer</button>
+    </form>
+    {% if samples %}
+    <ul class="samples">
+      {% for sample in samples %}
+      <li>
+        <span>{{ sample.stem.replace("--", " · ").replace("_", " ") }}</span>
+        <audio controls preload="none" src="/projects/{{ name }}/files/samples/{{ sample.name }}"></audio>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </article>
+
+  <article>
+    <h2>4 · Synthétiser</h2>
+    <p>
+      Chaque segment est mesuré et rejoué s'il paraît fautif. Comptez une vingtaine de
+      minutes pour un livre de quatre-vingt-dix minutes.
+    </p>
+    <form method="post" action="/projects/{{ name }}/jobs/synth">
+      <div class="row">
+        <select name="backend">
+          {% for backend in backends %}
+          <option value="{{ backend }}" {% if project.backend == backend %}selected{% endif %}>{{ backend }}</option>
+          {% endfor %}
+        </select>
+        <input type="text" name="voice" placeholder="voix" value="{{ project.voice or '' }}">
+      </div>
+      <label><input type="checkbox" name="force"> tout resynthétiser</label>
+      <button type="submit" {% if job or not status["segments"] %}disabled{% endif %}>Lancer la synthèse</button>
+    </form>
+    {% if status["chapitres synthétisés"] %}
+      <p class="done">{{ status["chapitres synthétisés"] }} chapitre(s) synthétisé(s).</p>
+    {% endif %}
+  </article>
+
+  <article>
+    <h2>5 · Assembler</h2>
+    <p>Normalise le niveau sonore, écrit les MP3 et le M4B chapitré avec sa couverture.</p>
+    <form method="post" action="/projects/{{ name }}/jobs/assemble">
+      <button type="submit" {% if job or not status["chapitres synthétisés"] %}disabled{% endif %}>Assembler</button>
+    </form>
+    {% if status["m4b"] %}
+    <p class="done">
+      <a class="button" href="/projects/{{ name }}/files/{{ status['m4b'].name }}">
+        Télécharger le M4B
+      </a>
+    </p>
+    {% endif %}
+  </article>
+
+</section>
+{% endblock %}

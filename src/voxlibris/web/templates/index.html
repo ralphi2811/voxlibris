@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <h1>Vos livres audio</h1>
+  <p>
+    Déposez un EPUB, un PDF ou un fichier texte. Un EPUB traverse toute la chaîne sans
+    intervention ; un scan demandera une relecture, que l'éditeur intégré rend rapide.
+  </p>
+</section>
+
+<form class="upload" method="post" action="/projects" enctype="multipart/form-data">
+  <label class="drop">
+    <input type="file" name="file" accept=".epub,.pdf,.txt,.md" required>
+    <span>Choisir un fichier</span>
+  </label>
+  <div class="fields">
+    <input type="text" name="title" placeholder="Titre (facultatif)">
+    <input type="text" name="author" placeholder="Auteur (facultatif)">
+  </div>
+  <button type="submit">Extraire</button>
+</form>
+
+{% if projects %}
+<table class="projects">
+  <thead>
+    <tr><th>Livre</th><th>Format</th><th>Chapitres</th><th>Voix</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for name, project in projects %}
+    <tr>
+      <td>
+        <a href="/projects/{{ name }}">{{ project.title }}</a>
+        <small>{{ project.author }}</small>
+      </td>
+      <td><code>{{ project.kind or "—" }}</code></td>
+      <td>{{ project.status()["chapitres"] }}</td>
+      <td>{{ project.voice or "—" }}</td>
+      <td class="right">
+        {% set m4b = project.status()["m4b"] %}
+        {% if m4b %}
+          <a class="button" href="/projects/{{ name }}/files/{{ m4b.name }}">Télécharger</a>
+        {% elif project.needs_review %}
+          <span class="tag warn">à relire</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">Aucun projet pour l'instant.</p>
+{% endif %}
+{% endblock %}

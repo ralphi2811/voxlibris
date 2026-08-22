@@ -8,10 +8,14 @@ license = { file = "LICENSE" }
 authors = [{ name = "ralphi2811" }]
 keywords = ["audiobook", "tts", "epub", "pdf", "ocr", "xtts", "m4b"]
 
-# Le cœur n'embarque ni torch ni les moteurs TTS : l'ingestion, la normalisation et
-# l'assemblage tournent sur une machine sans GPU, et seul le worker installe la pile
-# lourde (voir l'extra « tts »). C'est ce qui permet une image web de quelques centaines
-# de mégaoctets là où le worker en pèse huit.
+# Le cœur n'embarque ni torch ni les moteurs de synthèse : l'ingestion, la relecture,
+# la normalisation, l'assemblage et l'interface web tournent sur une machine sans GPU.
+# Seul l'ouvrier installe la pile lourde, via l'extra « tts ». C'est ce qui permet une
+# image web de quelques centaines de mégaoctets là où celle de l'ouvrier en pèse huit
+# gigaoctets.
+#
+# La file de tâches est adossée à SQLite, d'où l'absence de Redis : pour un outil
+# auto-hébergé mono-utilisateur, cela supprime un service à déployer.
 dependencies = [
     "pymupdf>=1.24",
     "ebooklib>=0.18",
@@ -25,6 +29,10 @@ dependencies = [
     "pyyaml>=6.0",
     "typer>=0.12",
     "rich>=13.7",
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.4",
+    "jinja2>=3.1.6",
+    "python-multipart>=0.0.32",
 ]
 
 [project.optional-dependencies]
@@ -39,15 +47,6 @@ tts = [
     "piper-tts>=1.7",
     "soundfile>=0.12",
     "numpy>=1.26",
-]
-web = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "jinja2>=3.1",
-    "python-multipart>=0.0.9",
-    "sqlmodel>=0.0.22",
-    "arq>=0.26",
-    "redis>=5.0",
 ]
 ocr = ["pytesseract>=0.3.10", "pillow>=10.3"]
 dev = ["pytest>=8.2", "ruff>=0.5", "mypy>=1.10"]
@@ -80,3 +79,9 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]

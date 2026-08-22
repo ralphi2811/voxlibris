@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ chapter.title }} — relecture{% endblock %}
+
+{% block breadcrumb %}
+<nav>
+  <a href="/">Projets</a> /
+  <a href="/projects/{{ name }}">{{ project.title }}</a> /
+  chapitre {{ chapter.number }}
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="review-head">
+  <h1>{{ "%02d"|format(chapter.number) }} · {{ chapter.title }}</h1>
+  <div class="pager">
+    {% if previous %}<a href="/projects/{{ name }}/review/{{ previous }}">← précédent</a>{% endif %}
+    {% if following %}<a href="/projects/{{ name }}/review/{{ following }}">suivant →</a>{% endif %}
+  </div>
+</section>
+
+{% if suspects %}
+<details class="suspects" open>
+  <summary>{{ suspects|length }} forme(s) à vérifier</summary>
+  <p class="hint">
+    Ce n'est pas un correcteur : l'OCR produit des fautes qui ne se devinent qu'au sens.
+    Ces formes sont seulement celles qui méritent un coup d'œil.
+  </p>
+  <ul>
+    {% for suspect in suspects[:60] %}
+    <li>
+      <button type="button" class="chip" data-word="{{ suspect.word }}">{{ suspect.word }}</button>
+      <span class="reason">{{ suspect.reason }}</span>
+      <span class="context">…{{ suspect.context }}…</span>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+<form class="review" method="post" action="/projects/{{ name }}/review/{{ chapter.number }}">
+  <div class="pane">
+    <label class="field">
+      <span>Titre du chapitre</span>
+      <input type="text" name="title" value="{{ chapter.title }}">
+    </label>
+    <label class="field grow">
+      <span>Texte — une ligne vide sépare deux paragraphes</span>
+      <textarea name="text" spellcheck="true" lang="{{ project.language }}">{{ chapter.text }}</textarea>
+    </label>
+    <div class="actions">
+      <button type="submit">Enregistrer</button>
+      <a class="button ghost" href="/projects/{{ name }}">Retour au projet</a>
+    </div>
+  </div>
+
+  {% if chapter.source_pages %}
+  <aside class="pane page">
+    <div class="page-head">
+      <span>Page d'origine</span>
+      <span class="range">{{ chapter.source_pages[0] }}–{{ chapter.source_pages[1] }}</span>
+    </div>
+    <img id="page-image" src="/projects/{{ name }}/page/{{ chapter.number }}?page=0" alt="page numérisée">
+    <div class="page-nav">
+      <button type="button" id="page-prev">←</button>
+      <span id="page-label">1 / {{ chapter.source_pages[1] - chapter.source_pages[0] + 1 }}</span>
+      <button type="button" id="page-next">→</button>
+    </div>
+  </aside>
+  {% endif %}
+</form>
+
+<script>
+  // Cliquer sur un mot suspect le sélectionne dans le texte : c'est le va-et-vient
+  // qui rend la relecture d'un scan supportable.
+  const area = document.querySelector('textarea[name=text]');
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const index = area.value.indexOf(chip.dataset.word);
+      if (index < 0) return;
+      area.focus();
+      area.setSelectionRange(index, index + chip.dataset.word.length);
+      // Amener la sélection au centre de la zone visible.
+      const ratio = index / Math.max(area.value.length, 1);
+      area.scrollTop = ratio * area.scrollHeight - area.clientHeight / 2;
+    });
+  });
+
+  const image = document.getElementById('page-image');
+  if (image) {
+    const total = {{ (chapter.source_pages[1] - chapter.source_pages[0] + 1) if chapter.source_pages else 1 }};
+    let offset = 0;
+    const label = document.getElementById('page-label');
+    const show = () => {
+      image.src = `/projects/{{ name }}/page/{{ chapter.number }}?page=${offset}`;
+      label.textContent = `${offset + 1} / ${total}`;
+    };
+    document.getElementById('page-prev').onclick = () => { offset = Math.max(0, offset - 1); show(); };
+    document.getElementById('page-next').onclick = () => { offset = Math.min(total - 1, offset + 1); show(); };
+  }
+</script>
+{% endblock %}

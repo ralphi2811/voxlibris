@@ -1,0 +1,25 @@
+{% if job %}
+<div class="job running">
+  <div class="job-head">
+    <strong>{{ job.kind }}</strong>
+    <span class="state">{{ job.state }}</span>
+    <span class="elapsed">{{ "%.0f"|format(job.running_for) }} s</span>
+  </div>
+  <div class="bar"><div class="fill" style="width: {{ (job.progress * 100)|round }}%"></div></div>
+  <p class="message">{{ job.message or "démarrage…" }}</p>
+</div>
+{% elif jobs and jobs[0].state == "échoué" %}
+<div class="job failed">
+  <div class="job-head"><strong>{{ jobs[0].kind }}</strong><span class="state">échoué</span></div>
+  <p class="message">{{ jobs[0].message }}</p>
+  <details><summary>journal</summary><pre>{{ jobs[0].log[-3000:] }}</pre></details>
+</div>
+{% elif jobs and jobs[0].state == "terminé" %}
+<div class="job done">
+  <div class="job-head"><strong>{{ jobs[0].kind }}</strong><span class="state">terminé</span></div>
+  <details>
+    <summary>{{ jobs[0].message }}</summary>
+    <pre>{{ jobs[0].log[-3000:] }}</pre>
+  </details>
+</div>
+{% endif %}

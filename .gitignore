@@ -42,3 +42,6 @@ build/
 *.swp
 .idea/
 .vscode/
+
+# Configuration locale de l'éditeur, propre à chaque poste.
+.claude/

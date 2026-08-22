@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}voxlibris{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">vox<span>libris</span></a>
+    {% block breadcrumb %}{% endblock %}
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <p>
+      Synthèse locale. Le moteur XTTS-v2 est sous licence
+      <a href="https://coqui.ai/cpml" rel="noopener">CPML</a>, usage non commercial.
+    </p>
+  </footer>
+</body>
+</html>
