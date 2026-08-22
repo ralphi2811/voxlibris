@@ -18,6 +18,9 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "num2words>=0.5.13",
     "pyspellchecker>=0.8",
+    # Le contrôle qualité analyse les formes d'onde : il appartient au cœur, pas aux
+    # moteurs, car c'est lui qui décide si un énoncé est à rejouer.
+    "numpy>=1.26",
     "pydantic>=2.7",
     "pyyaml>=6.0",
     "typer>=0.12",
@@ -69,6 +72,11 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Typer déclare les options dans les valeurs par défaut : c'est son idiome, et B008
+# le proscrit. La règle garde tout son sens partout ailleurs.
+"src/voxlibris/cli.py" = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

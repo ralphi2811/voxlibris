@@ -182,53 +182,61 @@ def main() -> None:
         help="ne pas faire annoncer « Chapitre un. La demande en mariage. » en tête de piste",
     )
     args = parser.parse_args()
+    counts = build_segments(Path(args.dir), Path(args.out), announce_chapters=not args.no_announce)
+    for chapter, count in sorted(counts.items()):
+        print(f"ch{chapter:02d}  {count:>4} segments")
+    print(f"\n{sum(counts.values())} segments au total.")
 
-    out_dir = Path(args.out)
+
+def build_chapter_segments(
+    chapter: int, title: str, paragraphs: list[str], announce_chapter: bool = True
+) -> list[dict[str, object]]:
+    """Transforme les paragraphes d'un chapitre en segments prêts à synthétiser."""
+    records: list[dict[str, object]] = []
+    if announce_chapter and (header := announce(chapter, title)):
+        records.append({"idx": 0, "text": header, "pause_after_ms": PAUSE_TITLE})
+
+    for paragraph in paragraphs:
+        segments = segment_paragraph(normalize(paragraph))
+        for index, segment in enumerate(segments):
+            last = index == len(segments) - 1
+            text, extra_pause = defuse_ellipsis(segment)
+            if not text:
+                continue
+            records.append(
+                {
+                    "idx": len(records),
+                    "text": text,
+                    "pause_after_ms": (PAUSE_PARAGRAPH if last else PAUSE_SEGMENT)
+                    + extra_pause,
+                }
+            )
+
+    for record in records:
+        record["chapter"] = chapter
+        record["title"] = title
+    return records
+
+
+def build_segments(
+    text_dir: Path, out_dir: Path, announce_chapters: bool = True
+) -> dict[int, int]:
+    """Écrit un JSONL de segments par chapitre ; renvoie le compte par chapitre."""
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    grand_total = 0
-    for path in sorted(Path(args.dir).glob("ch*.md")):
+    counts: dict[int, int] = {}
+    for path in sorted(text_dir.glob("ch*.md")):
         meta, paragraphs = read_chapter(path)
         chapter = int(meta["chapter"])
-        title = meta["title"]
-
-        records: list[dict[str, object]] = []
-        if not args.no_announce and (header := announce(chapter, title)):
-            records.append({"idx": 0, "text": header, "pause_after_ms": PAUSE_TITLE})
-
-        for paragraph in paragraphs:
-            segments = segment_paragraph(normalize(paragraph))
-            for i, segment in enumerate(segments):
-                last = i == len(segments) - 1
-                text, extra_pause = defuse_ellipsis(segment)
-                if not text:
-                    continue
-                records.append(
-                    {
-                        "idx": len(records),
-                        "text": text,
-                        "pause_after_ms": (PAUSE_PARAGRAPH if last else PAUSE_SEGMENT)
-                        + extra_pause,
-                    }
-                )
-
-        for record in records:
-            record["chapter"] = chapter
-            record["title"] = title
-
+        records = build_chapter_segments(
+            chapter, meta["title"], paragraphs, announce_chapters
+        )
         target = out_dir / f"ch{chapter:02d}.jsonl"
         target.write_text(
             "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n",
             encoding="utf-8",
         )
-        longest = max(len(str(r["text"])) for r in records)
-        chars = sum(len(str(r["text"])) for r in records)
-        grand_total += chars
-        print(f"ch{chapter:02d}  {len(records):>4} segments  max {longest:>3} car.  {title}")
-
-    # ~14 caractères par seconde en lecture posée : donne un ordre de grandeur de la durée.
-    minutes = grand_total / 14 / 60
-    print(f"\n{grand_total} caractères, soit environ {minutes:.0f} minutes d'audio attendues.")
+        counts[chapter] = len(records)
+    return counts
 
 
 if __name__ == "__main__":
