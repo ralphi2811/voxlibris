@@ -178,3 +178,13 @@ form.review { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-
 .page img { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: white; }
 .page-nav { display: flex; gap: .8rem; align-items: center; justify-content: center; margin-top: .7rem; font-size: .85rem; color: var(--ink-soft); }
 .page-nav button { padding: .2rem .7rem; background: transparent; color: var(--accent); }
+
+.danger {
+  color: var(--bad) !important;
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+  border-left: 3px solid var(--bad);
+  padding: .6rem .8rem;
+  border-radius: 4px;
+  font-size: .86rem !important;
+}
+.tick { color: var(--ok); font-weight: 700; }

@@ -263,6 +263,30 @@ def assign_chapters(pages: list[Page]) -> dict[int, str]:
     return {c: title_of(c) or "" for c in sorted({p.chapter for p in pages if p.chapter})}
 
 
+def trim_back_matter(pages: list[Page], titles: dict[int, str]) -> list[str]:
+    """Retire les pages d'annexes que la détection de plage a laissé passer.
+
+    Table des matières, notice biographique et catalogue d'éditeur sont denses en texte :
+    la mesure du corps les prend pour du récit. Mais leur titre courant les trahit — il
+    n'est ni « CHAPITRE N » ni le titre du chapitre en cours.
+
+    Ces pages coûtent cher si on les laisse : leur reconnaissance de caractères est
+    particulièrement mauvaise, et le moteur s'échine ensuite à lire à voix haute des
+    lignes telles que « #sixQ sup, nu.f st bit s alta cent huit ». On rogne donc depuis
+    la fin, en s'arrêtant à la première page qui ne trahit rien — une page sans en-tête
+    est du récit, comme l'est une page d'ouverture de chapitre.
+    """
+    known = {t.upper() for t in titles.values() if t}
+    dropped: list[str] = []
+    while pages:
+        header = pages[-1].header
+        if not header or _chapter_number(header) is not None or header.upper() in known:
+            break
+        dropped.append(f"p.{pages[-1].number} « {header} »")
+        pages.pop()
+    return list(reversed(dropped))
+
+
 def ingest(
     path,
     first: int | None = None,
@@ -283,6 +307,7 @@ def ingest(
         pages.append(Page(number + 1, header, lines, dropped))
 
     chapter_titles = assign_chapters(pages)
+    back_matter = trim_back_matter(pages, chapter_titles)
     dropped_report = [
         f"p.{page.number:>3} {line}" for page in pages for line in page.dropped
     ]
@@ -314,7 +339,8 @@ def ingest(
         needs_review=True,
         notes={
             "layout": layout.describe(),
-            "pages": f"{first}-{last}",
+            "pages": f"{first}-{pages[-1].number if pages else last}",
+            "back_matter": back_matter,
             "dropped_lines": dropped_report,
         },
     )

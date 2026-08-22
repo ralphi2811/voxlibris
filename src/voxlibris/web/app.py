@@ -107,16 +107,12 @@ async def create_project(file: UploadFile, title: str = Form(""), author: str = 
 @app.get("/projects/{name}", response_class=HTMLResponse)
 def show_project(request: Request, name: str):
     project = load_project(name)
-    chapters = [
-        Chapter.from_markdown(path.read_text(encoding="utf-8"))
-        for path in sorted(project.text_dir.glob("ch*.md"))
-    ]
     return render(
         request,
         "project.html",
         name=name,
         project=project,
-        chapters=chapters,
+        chapters=project.chapter_states(),
         status=project.status(),
         job=queue.active(name),
         jobs=queue.list(name, limit=8),

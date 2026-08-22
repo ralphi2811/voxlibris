@@ -32,7 +32,13 @@
           <span class="num">{{ "%02d"|format(chapter.number) }}</span>
           {{ chapter.title }}
         </a>
-        <small>{{ chapter.word_count }} mots</small>
+        <small>
+          {{ chapter.words }} mots
+          {% if project.needs_review %}
+            {% if chapter.reviewed %}<span class="tick" title="relu">✓</span>
+            {% else %}<span class="tag warn">à relire</span>{% endif %}
+          {% endif %}
+        </small>
       </li>
       {% endfor %}
     </ul>
@@ -76,6 +82,13 @@
       Chaque segment est mesuré et rejoué s'il paraît fautif. Comptez une vingtaine de
       minutes pour un livre de quatre-vingt-dix minutes.
     </p>
+    {% if project.pending_review %}
+    <p class="danger">
+      <strong>{{ project.pending_review }} chapitre(s) ne sont pas relus.</strong>
+      Le moteur lira les coquilles de l'OCR telles quelles, et la synthèse dure des
+      dizaines de minutes avant que vous ne l'entendiez.
+    </p>
+    {% endif %}
     <form method="post" action="/projects/{{ name }}/jobs/synth">
       <div class="row">
         <select name="backend">
@@ -86,7 +99,9 @@
         <input type="text" name="voice" placeholder="voix" value="{{ project.voice or '' }}">
       </div>
       <label><input type="checkbox" name="force"> tout resynthétiser</label>
-      <button type="submit" {% if job or not status["segments"] %}disabled{% endif %}>Lancer la synthèse</button>
+      <button type="submit" {% if job or not status["segments"] %}disabled{% endif %}>
+        {% if project.pending_review %}Synthétiser quand même{% else %}Lancer la synthèse{% endif %}
+      </button>
     </form>
     {% if status["chapitres synthétisés"] %}
       <p class="done">{{ status["chapitres synthétisés"] }} chapitre(s) synthétisé(s).</p>

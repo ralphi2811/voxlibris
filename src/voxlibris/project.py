@@ -130,6 +130,37 @@ class Project:
         return project
 
     # --- État -----------------------------------------------------------------------
+    def chapter_states(self) -> list[dict[str, object]]:
+        """Pour chaque chapitre, son numéro, son titre et son état de relecture."""
+        states = []
+        for path in sorted(self.raw_dir.glob("ch*.md")):
+            number = int(path.stem.removeprefix("ch"))
+            reviewed = (self.clean_dir / path.name).exists()
+            head = path.read_text(encoding="utf-8").split("---", 2)
+            title = ""
+            for line in head[1].splitlines() if len(head) > 2 else []:
+                if line.startswith("title:"):
+                    title = line.partition(":")[2].strip().strip('"')
+            body = (self.clean_dir if reviewed else self.raw_dir) / path.name
+            words = len(body.read_text(encoding="utf-8").split("---", 2)[-1].split())
+            states.append(
+                {"number": number, "title": title, "reviewed": reviewed, "words": words}
+            )
+        return states
+
+    @property
+    def pending_review(self) -> int:
+        """Nombre de chapitres non relus, sur un texte qui en réclame une.
+
+        Un texte océrisé synthétisé sans relecture fait lire à voix haute les coquilles
+        de l'OCR — et, si la détection de plage a laissé passer des annexes, la table des
+        matières elle-même. C'est une déconvenue coûteuse : la synthèse dure des dizaines
+        de minutes avant qu'on l'entende.
+        """
+        if not self.needs_review:
+            return 0
+        return sum(1 for state in self.chapter_states() if not state["reviewed"])
+
     def status(self) -> dict[str, object]:
         wavs = sorted(self.wav_dir.glob("ch*.wav"))
         return {
