@@ -1,0 +1,44 @@
+# --- Contenu sous droits d'auteur -------------------------------------------------
+# voxlibris manipule des livres entiers. Tout ce qui entre ou sort d'un traitement est
+# potentiellement l'œuvre d'un tiers : la republier ici en ferait une contrefaçon.
+# Ces règles passent AVANT tout le reste et ne doivent jamais être assouplies.
+/data/
+/out/
+/text/
+*.epub
+*.mobi
+*.azw3
+*.m4b
+*.mp3
+*.wav
+*.flac
+*.opus
+
+# Les PDF sont exclus par défaut ; seuls ceux du domaine public déposés dans samples/
+# sont réintroduits explicitement ci-dessous.
+*.pdf
+!samples/**/*.pdf
+
+# --- Python -----------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# --- Environnement et état --------------------------------------------------------
+.env
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Divers -----------------------------------------------------------------------
+.DS_Store
+*.swp
+.idea/
+.vscode/

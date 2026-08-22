@@ -1,0 +1,51 @@
+# Licences des composants tiers
+
+Le code de voxlibris est sous licence MIT (voir `LICENSE`). Les **modèles de synthèse
+vocale** qu'il pilote ont leurs propres licences, distinctes, que voxlibris ne peut pas
+étendre ni assouplir.
+
+voxlibris **ne redistribue aucun poids de modèle**. Ils sont téléchargés à l'exécution,
+sur la machine de l'utilisateur, depuis leurs dépôts respectifs. La licence du modèle
+engage donc l'utilisateur au moment où il choisit de l'exécuter.
+
+## Moteurs de synthèse
+
+| Moteur | Licence des poids | Portée |
+|---|---|---|
+| **XTTS-v2** (Coqui) | [CPML](https://coqui.ai/cpml) | **Usage non commercial uniquement** |
+| **Kokoro-82M** | Apache 2.0 | Aucune restriction d'usage |
+| **Piper** | MIT | Aucune restriction d'usage |
+
+### ⚠️ XTTS-v2 est le moteur par défaut
+
+Il offre la meilleure qualité en français, et c'est pourquoi il est proposé par défaut.
+Mais la **Coqui Public Model License interdit tout usage commercial**.
+
+Si votre usage est commercial, changez de moteur — c'est une ligne de configuration :
+
+```yaml
+# config.yaml
+tts:
+  backend: kokoro   # Apache 2.0, ou "piper" pour du MIT
+```
+
+La première exécution de XTTS suppose l'acceptation de la CPML, matérialisée par la
+variable d'environnement `COQUI_TOS_AGREED=1`. Elle n'est **pas** positionnée par défaut :
+c'est un acte délibéré de l'utilisateur.
+
+## Autres dépendances
+
+- **PyMuPDF** — AGPL-3.0. Utilisée comme bibliothèque pour lire les PDF. Si vous
+  distribuez un service en réseau bâti sur voxlibris, cette licence a des implications :
+  vérifiez-les. Une alternative sous licence permissive (`pypdfium2`, BSD) est envisagée.
+- **Tesseract OCR** — Apache 2.0.
+- **FFmpeg** — LGPL/GPL selon la compilation, invoqué comme programme externe.
+- Le reste de la pile Python (FastAPI, ebooklib, num2words…) est sous licences
+  permissives, détaillées dans les métadonnées de chaque paquet.
+
+## Contenu traité
+
+voxlibris ne fournit aucun livre. Les fichiers du dossier `samples/` proviennent du
+**domaine public**. Les livres que vous traitez restent votre affaire : convertir en
+audio une œuvre encore protégée pour votre usage personnel relève, selon les pays, de la
+copie privée — la diffuser, non.
