@@ -12,7 +12,12 @@
 (function () {
   "use strict";
 
+  function isRunning(node) {
+    return !!node.querySelector(".job.running");
+  }
+
   function refresh(node) {
+    var wasRunning = isRunning(node);
     fetch(node.dataset.poll, { headers: { "X-Requested-With": "fetch" } })
       .then(function (response) {
         if (!response.ok) throw new Error(response.status);
@@ -20,9 +25,15 @@
       })
       .then(function (html) {
         node.innerHTML = html;
-        // Une tâche encore active porte la classe « running » : sans elle, plus rien
-        // ne bouge et le sondage n'a plus lieu d'être.
-        if (!node.querySelector(".job.running")) stop(node);
+        if (!isRunning(node)) {
+          stop(node);
+          // Le fragment n'est pas seul concerné par la fin d'une tâche : les étapes
+          // suivantes viennent de se débloquer, des compteurs ont changé, un lien de
+          // téléchargement est apparu. Tout cela a été rendu par le serveur avant que
+          // la tâche ne s'achève, et se trouve donc périmé. Sans ce rechargement,
+          // l'utilisateur reste devant des boutons grisés sans savoir pourquoi.
+          if (wasRunning) window.location.reload();
+        }
       })
       .catch(function () {
         stop(node);
