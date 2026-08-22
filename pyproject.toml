@@ -40,13 +40,27 @@ dependencies = [
 # Attention : les licences des modèles diffèrent, voir NOTICE.md.
 tts = [
     "coqui-tts==0.27.5",
+    # transformers 5.x a retiré `isin_mps_friendly`, que coqui-tts importe encore via la
+    # couche Tortoise de XTTS. Sans cette borne, l'import du moteur échoue purement et
+    # simplement — et le message d'erreur ne désigne pas la cause.
+    "transformers<5",
     "kokoro==0.9.4",
     "misaki[en]==0.9.4",
+    # Kokoro phonémise le français via espeak-ng. Ce paquet embarque la bibliothèque,
+    # ce qui évite d'exiger une installation système.
     "espeakng-loader",
     "phonemizer-fork",
     "piper-tts>=1.7",
     "soundfile>=0.12",
     "numpy>=1.26",
+    # coqui-tts ne déclare torch et torchaudio que dans ses propres extras, si bien
+    # qu'une installation ordinaire laisse torchaudio de côté — et XTTS échoue alors à
+    # l'import, sur un message qui ne dit pas d'où vient le manque.
+    "torch>=2.2",
+    "torchaudio>=2.2",
+    # torchaudio 2.9+ délègue les entrées/sorties audio à torchcodec, que coqui-tts ne
+    # réclame lui aussi que dans un extra.
+    "torchcodec",
 ]
 ocr = ["pytesseract>=0.3.10", "pillow>=10.3"]
 dev = ["pytest>=8.2", "ruff>=0.5", "mypy>=1.10"]
