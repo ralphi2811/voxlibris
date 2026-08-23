@@ -33,6 +33,21 @@ La première exécution de XTTS suppose l'acceptation de la CPML, matérialisée
 variable d'environnement `COQUI_TOS_AGREED=1`. Elle n'est **pas** positionnée par défaut :
 c'est un acte délibéré de l'utilisateur.
 
+## Modèle de langage pour la relecture
+
+voxlibris n'embarque ni ne recommande aucun modèle de langage : il se contente d'appeler
+un service compatible avec le protocole OpenAI, dont l'adresse et le nom de modèle sont
+donnés dans le `.env`. Le choix du modèle — et donc de sa licence — appartient
+entièrement à l'utilisateur.
+
+À titre d'exemple, les modèles publiés sous **Apache 2.0** (Qwen, Mistral) n'imposent
+aucune restriction d'usage, là où d'autres familles assortissent leur diffusion de
+conditions particulières. Vérifiez celle du modèle que vous configurez.
+
+Cette étape est facultative et désactivable (`VOXLIBRIS_LLM_ENABLED=0`). L'adresse par
+défaut est locale : **aucun texte ne quitte la machine** tant que l'utilisateur n'a pas
+lui-même désigné un service distant — ce qui, pour un ouvrage protégé, mérite réflexion.
+
 ## Autres dépendances
 
 - **PyMuPDF** — AGPL-3.0. Utilisée comme bibliothèque pour lire les PDF. Si vous

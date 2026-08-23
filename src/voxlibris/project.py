@@ -64,6 +64,11 @@ class Project:
         return self.root / "work" / "voices.json"
 
     @property
+    def suggestions_file(self) -> Path:
+        """Propositions de correction du modèle, en attente d'un arbitrage humain."""
+        return self.root / "work" / "suggestions.json"
+
+    @property
     def config_file(self) -> Path:
         return self.root / "project.json"
 
@@ -128,6 +133,21 @@ class Project:
             document.write(project.clean_dir)
         project.save()
         return project
+
+    # --- Contenu ----------------------------------------------------------------------
+    def chapter_texts(self) -> dict[str, str]:
+        """Le texte de chaque chapitre, tel que l'éditeur de relecture l'affiche.
+
+        Passer par `Chapter` plutôt que de découper l'en-tête à la main garantit que les
+        positions relevées ici désignent bien les mêmes caractères que ceux de la zone de
+        saisie — sans quoi une suggestion s'appliquerait quelques caractères trop loin.
+        """
+        from .document import Chapter
+
+        return {
+            path.name: Chapter.from_markdown(path.read_text(encoding="utf-8")).text
+            for path in sorted(self.text_dir.glob("ch*.md"))
+        }
 
     # --- État -----------------------------------------------------------------------
     def chapter_states(self) -> list[dict[str, object]]:

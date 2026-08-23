@@ -89,6 +89,104 @@ def review(
     console.print(f"\n{len(suspects)} formes à vérifier.")
 
 
+@app.command("llm-check")
+def llm_check() -> None:
+    """Vérifie que le modèle de langage configuré répond."""
+    from .llm import LLM, LLMConfig, LLMError
+
+    config = LLMConfig.from_env()
+    console.print(f"Modèle  : [bold]{config.model}[/bold]")
+    console.print(f"Adresse : {config.base_url}")
+    if not config.enabled:
+        console.print("[yellow]Assistance désactivée (VOXLIBRIS_LLM_ENABLED=0).[/yellow]")
+        return
+    try:
+        console.print(f"[green]{LLM(config).probe()}[/green]")
+    except LLMError as error:
+        console.print(f"[red]{error}[/red]")
+        raise typer.Exit(1) from error
+
+
+@app.command()
+def proofread(
+    root: Path,
+    vocabulary: Path = typer.Option(None, help="fichier de mots propres à l'ouvrage"),
+) -> None:
+    """Propose des corrections pour les formes suspectes, sans rien appliquer."""
+    from .proofread import suggest
+
+    project = _open(root)
+    words = vocabulary.read_text(encoding="utf-8").split() if vocabulary else []
+    report = suggest(project.chapter_texts(), language=project.language, vocabulary=words)
+    if report.error:
+        console.print(f"[red]{report.error}[/red]")
+
+    table = Table("Chapitre", "Forme", "Proposition", "Motif du signalement")
+    for suggestion in report.suggestions:
+        table.add_row(
+            suggestion.chapter,
+            suggestion.word,
+            f"[green]{suggestion.replacement}[/green]",
+            suggestion.reason,
+        )
+    console.print(table)
+
+    project.suggestions_file.parent.mkdir(parents=True, exist_ok=True)
+    project.suggestions_file.write_text(report.to_json(), encoding="utf-8")
+    console.print(
+        f"{len(report.suggestions)} proposition(s) sur {report.asked} forme(s) soumises, "
+        f"{report.suspects} signalées au total. {len(report.rejected)} écartée(s) par les "
+        f"garde-fous.\nRien n'a été modifié : voir {project.suggestions_file}."
+    )
+
+
+@app.command("bench-proofread")
+def bench_proofread(
+    raw: Path = typer.Argument(..., help="dossier du texte océrisé brut"),
+    clean: Path = typer.Argument(..., help="le même texte, relu à la main"),
+    recurrence_limit: int = typer.Option(4, help="seuil au-delà duquel une forme est laissée"),
+    show: int = typer.Option(12, help="nombre d'exemples affichés par catégorie"),
+) -> None:
+    """Mesure les suggestions contre une relecture humaine de référence."""
+    from .bench import evaluate, read_bodies
+
+    outcome = evaluate(read_bodies(raw), read_bodies(clean), recurrence_limit=recurrence_limit)
+    if outcome.report.error:
+        console.print(f"[red]{outcome.report.error}[/red]")
+
+    table = Table("Mesure", "Nombre", title="Suggestions contre relecture humaine")
+    table.add_row("Corrections faites à la main", str(outcome.corrections))
+    table.add_row("(apostrophes redressées, hors sujet)", str(outcome.typographic))
+    table.add_row("Formes signalées", str(outcome.report.suspects))
+    table.add_row("Formes soumises au modèle", str(outcome.report.asked))
+    table.add_row("[green]Fautes corrigées[/green]", str(len(outcome.fixed)))
+    table.add_row("Corrections inexactes", str(len(outcome.inexact)))
+    table.add_row("[red]Modifications indues[/red]", str(len(outcome.undue)))
+    table.add_row("Fautes manquées (signalées)", str(len(outcome.missed_flagged)))
+    table.add_row("Fautes manquées (non signalées)", str(len(outcome.missed_unflagged)))
+    table.add_row("Propositions écartées d'office", str(len(outcome.report.rejected)))
+    console.print(table)
+    console.print(
+        f"Précision {outcome.precision:.0%} — rappel {outcome.recall:.0%}\n"
+        "La ligne qui décide est « modifications indues » : ce sont des propositions "
+        "portant sur un texte déjà juste."
+    )
+
+    groups = (
+        ("Corrigé", [(c.word, s.replacement, c.expected) for c, s in outcome.fixed]),
+        ("Inexact", [(c.word, s.replacement, c.expected) for c, s in outcome.inexact]),
+        ("[red]Indu[/red]", [(s.word, s.replacement, "rien à corriger") for s in outcome.undue]),
+    )
+    for title, rows in groups:
+        if not rows:
+            continue
+        console.print(f"\n[bold]{title}[/bold]")
+        for word, proposal, expected in rows[:show]:
+            console.print(f"  {word:<20} → {proposal:<20} (attendu : {expected})")
+        if len(rows) > show:
+            console.print(f"  … et {len(rows) - show} autre(s)")
+
+
 @app.command()
 def normalize(root: Path) -> None:
     """Prépare les segments à synthétiser à partir du texte faisant foi."""

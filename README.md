@@ -34,6 +34,42 @@ Selon la source, l'effort n'est pas le même — autant le dire franchement :
 voxlibris ne supprime pas cette relecture, il la rend rapide : texte éditable face à
 l'image de la page, mots suspects surlignés, écoute d'un segment en un clic.
 
+### Assistance par modèle de langage
+
+Un modèle local peut prendre en charge la partie fastidieuse de cette relecture. Le
+cadrage est strict, et c'est ce qui le rend utilisable :
+
+- il ne voit que les formes **déjà signalées** comme suspectes, une par une, jamais le
+  texte entier — il lui est donc impossible de réécrire ce qu'on ne lui a pas montré ;
+- ce qu'il propose est borné : distance d'édition limitée, deux mots au maximum, aucune
+  ponctuation ajoutée, et le remplacement doit exister au dictionnaire ;
+- une forme qui **revient dans l'ouvrage** ne lui est pas soumise : ce qui se répète est
+  voulu — le parler d'un personnage, un néologisme — et non une coquille ;
+- **rien n'est appliqué.** Les propositions s'affichent dans l'éditeur, avec leur
+  contexte, et vous les acceptez ou les écartez d'un clic.
+
+Cette prudence n'est pas de principe. Sur notre livre de référence, le modèle a proposé
+de corriger « Mâdâme » en « Madame » — la graphie est celle d'un perroquet, et l'accepter
+aurait fait perdre à un personnage sa voix. Le contexte affiché à côté de chaque
+proposition sert exactement à cela.
+
+Mesurez-le avant de lui faire confiance : si vous disposez d'un texte océrisé **et** de sa
+relecture manuelle, `voxlibris bench-proofread text/raw text/clean` compare les deux et
+compte les fautes corrigées, les fautes manquées et — la seule ligne qui décide — les
+modifications proposées sur un texte qui était déjà juste.
+
+La configuration tient dans le `.env` : n'importe quel service parlant le protocole
+OpenAI convient, d'Ollama à llama.cpp, vLLM ou un fournisseur distant.
+
+```bash
+VOXLIBRIS_LLM_BASE_URL=http://localhost:11434/v1
+VOXLIBRIS_LLM_MODEL=gemma4:12b
+```
+
+L'étape est **facultative** : sans modèle joignable, la relecture se fait à la main comme
+avant. L'adresse par défaut est locale, donc aucun texte ne quitte la machine tant que
+vous n'avez pas vous-même désigné un service distant.
+
 ## Qualité de la synthèse
 
 Un modèle autorégressif comme XTTS peut, sur un segment isolé, boucler ou partir dans

@@ -163,6 +163,14 @@ ul.samples audio { width: 100%; height: 2rem; }
   padding: .1rem .5rem; border-radius: 999px; font-size: .8rem; white-space: nowrap;
 }
 .suspects .reason { color: var(--warn); font-size: .76rem; white-space: nowrap; }
+
+/* Les propositions du modèle se distinguent des simples signalements : elles modifient
+   le texte d'un clic, et méritent donc d'être lues avant d'être acceptées. */
+.proposals { border-left: 3px solid var(--ok); }
+.proposals .chip { background: transparent; border: 1px solid var(--ok); color: var(--ok); }
+.proposals .chip strong { font-weight: 700; }
+.proposals .chip.applied, .proposals .chip:disabled { opacity: .45; text-decoration: line-through; }
+.steps .hint { font-size: .82rem; margin: .5rem 0 0; }
 .suspects .context { color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 form.review { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: start; }

@@ -92,6 +92,30 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
         queue.report(job.id, message="contrôle qualité : aucun segment hors tolérance")
 
 
+def run_proofread(project: Project, job: Job, queue: Queue) -> None:
+    """Interroge le modèle de langage sur les formes suspectes.
+
+    Le résultat est déposé sur disque, et rien d'autre : c'est l'éditeur de relecture qui
+    présentera les propositions, une par une, à l'arbitrage d'un humain.
+    """
+    from .proofread import suggest
+
+    texts = project.chapter_texts()
+    queue.report(job.id, 0.1, f"{len(texts)} chapitre(s) à examiner")
+    report = suggest(texts, language=project.language)
+    project.suggestions_file.parent.mkdir(parents=True, exist_ok=True)
+    project.suggestions_file.write_text(report.to_json(), encoding="utf-8")
+
+    if report.error:
+        raise RuntimeError(report.error)
+    queue.report(
+        job.id,
+        1.0,
+        f"{len(report.suggestions)} proposition(s) sur {report.asked} forme(s) soumises, "
+        f"{len(report.rejected)} écartée(s) par les garde-fous. Rien n'a été modifié.",
+    )
+
+
 def run_sample(project: Project, job: Job, queue: Queue) -> None:
     """Synthétise un même extrait avec plusieurs voix, pour choisir à l'oreille."""
     from .tts.backends import load
@@ -138,6 +162,7 @@ def run_assemble(project: Project, job: Job, queue: Queue) -> None:
 
 HANDLERS = {
     "normalize": run_normalize,
+    "proofread": run_proofread,
     "synth": run_synth,
     "sample": run_sample,
     "assemble": run_assemble,

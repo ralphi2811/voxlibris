@@ -42,6 +42,19 @@
       </li>
       {% endfor %}
     </ul>
+    {% if project.needs_review %}
+    <form method="post" action="/projects/{{ name }}/jobs/proofread">
+      <button type="submit" class="ghost" {% if job %}disabled{% endif %}>
+        Proposer des corrections
+      </button>
+      <p class="hint">
+        Un modèle de langage examine les seules formes déjà signalées et propose un
+        remplacement pour chacune. Rien n'est appliqué : les propositions apparaissent
+        dans l'éditeur, où vous les acceptez ou les écartez une à une.
+      </p>
+    </form>
+    {% if suggestions %}<p class="done">{{ suggestions }} proposition(s) en attente.</p>{% endif %}
+    {% endif %}
   </article>
 
   <article>

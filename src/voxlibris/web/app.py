@@ -117,6 +117,7 @@ def show_project(request: Request, name: str):
         job=queue.active(name),
         jobs=queue.list(name, limit=8),
         backends=sorted(BACKENDS),
+        suggestions=len(load_suggestions(project)),
         samples=sorted((project.out_dir / "samples").glob("*.wav")),
     )
 
@@ -128,6 +129,23 @@ def delete_project(name: str):
 
 
 # --- Relecture ----------------------------------------------------------------------
+def load_suggestions(project: Project) -> list:
+    """Propositions du modèle, si une passe a été lancée.
+
+    Un rapport illisible ou écrit par une version antérieure ne doit pas empêcher de
+    relire : dans le doute, la page s'affiche sans suggestions plutôt qu'en erreur.
+    """
+    from ..proofread import Report
+
+    path = project.suggestions_file
+    if not path.exists():
+        return []
+    try:
+        return Report.from_json(path.read_text(encoding="utf-8")).suggestions
+    except (ValueError, TypeError):
+        return []
+
+
 @app.get("/projects/{name}/review/{number}", response_class=HTMLResponse)
 def review_chapter(request: Request, name: str, number: int):
     """Éditeur de relecture : le texte à corriger, la page d'origine en regard."""
@@ -150,6 +168,7 @@ def review_chapter(request: Request, name: str, number: int):
         project=project,
         chapter=chapter,
         suspects=suspects,
+        suggestions=[s for s in load_suggestions(project) if s.chapter == path.name],
         numbers=numbers,
         previous=max([n for n in numbers if n < number], default=None),
         following=min([n for n in numbers if n > number], default=None),
