@@ -117,6 +117,10 @@ def show_project(request: Request, name: str):
         job=queue.active(name),
         jobs=queue.list(name, limit=8),
         backends=sorted(BACKENDS),
+        # Les voix connues sans charger le moindre modèle. XTTS n'en fournit aucune :
+        # ses locuteurs ne se lisent qu'une fois les huit gigaoctets en mémoire, ce que
+        # l'interface n'a pas à faire — d'où le champ libre qui subsiste pour lui.
+        catalogues={name: list(cls.catalogue) for name, cls in BACKENDS.items()},
         suggestions=len(load_suggestions(project)),
         samples=sorted((project.out_dir / "samples").glob("*.wav")),
     )

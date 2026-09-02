@@ -14,6 +14,7 @@ Licences des modèles, très différentes les unes des autres, voir NOTICE.md :
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -62,6 +63,27 @@ SPEED_RANGE = (0.7, 1.3)
 def clamp_speed(speed: float) -> float:
     low, high = SPEED_RANGE
     return max(low, min(high, float(speed)))
+
+
+def resolve_voice(wanted: str, catalogue: Sequence[str]) -> str | None:
+    """Retrouve une voix du catalogue à partir de ce qui a été saisi.
+
+    Les identifiants sont longs et préfixés — « fr_FR-tom-medium » — et rien n'invite à
+    les recopier au caractère près. « tom », « FR-tom-medium » ou « Fr_FR-Tom-Medium »
+    désignent tous la même voix sans la moindre ambiguïté ; les refuser serait de la
+    pédanterie. On n'accepte en revanche que les correspondances uniques : si la saisie
+    convient à deux voix, c'est à l'utilisateur de trancher, pas à nous de deviner.
+    """
+    if wanted in catalogue:
+        return wanted
+    folded = wanted.strip().lower()
+    if not folded:
+        return None
+    for test in (lambda v: v.lower() == folded, lambda v: folded in v.lower()):
+        matches = [voice for voice in catalogue if test(voice)]
+        if len(matches) == 1:
+            return matches[0]
+    return None
 
 
 class UnknownVoice(RuntimeError):
@@ -125,8 +147,11 @@ class XttsBackend(Backend):
         self.speed = clamp_speed(speed)
         self._tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
         self.sample_rate = self._tts.synthesizer.output_sample_rate
-        if voice not in self.voices():
+        # Le catalogue de XTTS n'est lisible qu'ici, le modèle une fois en mémoire.
+        resolved = resolve_voice(voice, self.voices())
+        if resolved is None:
             raise UnknownVoice(self.name, voice, self.voices())
+        self.voice = resolved
 
     def voices(self) -> list[str]:  # type: ignore[override]
         return sorted(self._tts.synthesizer.tts_model.speaker_manager.speakers.keys())
@@ -246,8 +271,11 @@ def load(
     wanted = voice or cls.default_voice  # type: ignore[attr-defined]
     # Vérifié avant d'instancier quand le catalogue est connu : charger huit gigaoctets
     # de modèle pour découvrir ensuite que la voix n'existe pas serait une perte de temps.
-    if cls.catalogue and wanted not in cls.catalogue:
-        raise UnknownVoice(name, wanted, list(cls.catalogue))
+    if cls.catalogue:
+        resolved = resolve_voice(wanted, cls.catalogue)
+        if resolved is None:
+            raise UnknownVoice(name, wanted, list(cls.catalogue))
+        wanted = resolved
     try:
         return cls(wanted, device, speed)  # type: ignore[call-arg]
     except ImportError as error:

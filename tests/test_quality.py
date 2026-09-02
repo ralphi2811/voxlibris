@@ -145,3 +145,17 @@ class TestVoixDuMoteur:
         from voxlibris.tts.backends import BACKENDS
 
         assert "fr_FR-tom-medium" in BACKENDS["piper"].catalogue
+
+    def test_identifiant_approximatif_resolu(self):
+        """« FR-tom-medium » ou « tom » désignent la même voix, sans ambiguïté."""
+        from voxlibris.tts.backends import PIPER_VOICES, resolve_voice
+
+        for saisie in ("fr_FR-tom-medium", "FR-tom-medium", "tom", "Fr_FR-Tom-Medium"):
+            assert resolve_voice(saisie, PIPER_VOICES) == "fr_FR-tom-medium"
+
+    def test_saisie_ambigue_refusee(self):
+        """« medium » convient aux trois voix : c'est à l'utilisateur de trancher."""
+        from voxlibris.tts.backends import PIPER_VOICES, resolve_voice
+
+        assert resolve_voice("medium", PIPER_VOICES) is None
+        assert resolve_voice("inexistante", PIPER_VOICES) is None

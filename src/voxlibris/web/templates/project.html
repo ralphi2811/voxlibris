@@ -123,6 +123,7 @@
                placeholder="voix par défaut du moteur"
                data-backend="{{ project.backend or '' }}"
                value="{{ project.voice or '' }}">
+        <select name="voice" id="voice-list" disabled hidden></select>
       </div>
       <label>
         Vitesse
@@ -162,20 +163,41 @@
 </section>
 
 <script>
-  // Une voix appartient à un moteur et à un seul. Laisser « Damien Black », qui est une
-  // voix XTTS, dans le champ après un passage à Kokoro conduisait celui-ci à chercher un
-  // fichier « Damien Black.pt » sur son dépôt de modèles, et à rapporter une erreur 404
-  // que rien ne rattachait à la cause. Changer de moteur vide donc le champ, sauf pour
-  // revenir à celui déjà retenu sur ce projet.
+  // Une voix appartient à un moteur et à un seul, et son identifiant est long :
+  // « fr_FR-tom-medium ». Le recopier de mémoire dans un champ libre ne pouvait que mal
+  // finir — au mieux une erreur claire, au pire, avant le garde-fou, un moteur parti
+  // télécharger « Damien Black.pt » et un 404 sans rapport apparent.
+  //
+  // Quand les voix d'un moteur sont connues d'avance, on présente donc un menu. Il ne
+  // reste de champ libre que pour XTTS, dont les locuteurs ne se lisent qu'une fois le
+  // modèle chargé — ce que l'interface ne fait pas.
   (function () {
-    var voice = document.getElementById("voice");
-    if (!voice) return;
-    var form = voice.form;
-    var backend = form.querySelector("select[name=backend]");
-    var original = voice.value;
-    backend.addEventListener("change", function () {
-      voice.value = backend.value === voice.dataset.backend ? original : "";
-    });
+    var input = document.getElementById("voice");
+    var list = document.getElementById("voice-list");
+    if (!input || !list) return;
+
+    var catalogues = {{ catalogues|tojson }};
+    var backend = input.form.querySelector("select[name=backend]");
+    var original = input.value;
+
+    function show() {
+      var voices = catalogues[backend.value] || [];
+      var known = backend.value === input.dataset.backend ? original : "";
+      // Deux champs portent le même nom : celui qui est désactivé n'est pas soumis.
+      if (voices.length) {
+        list.innerHTML = "";
+        voices.forEach(function (voice) {
+          var option = new Option(voice, voice, false, voice === known);
+          list.add(option);
+        });
+      }
+      list.hidden = list.disabled = !voices.length;
+      input.hidden = input.disabled = voices.length > 0;
+      if (!voices.length) input.value = known;
+    }
+
+    backend.addEventListener("change", show);
+    show();
   })();
 </script>
 {% endblock %}
