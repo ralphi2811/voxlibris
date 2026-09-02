@@ -156,8 +156,20 @@ BACKENDS: dict[str, type[Backend]] = {
 
 
 def load(name: str, voice: str | None = None, device: str = "cuda") -> Backend:
-    """Instancie un moteur par son nom, avec sa voix par défaut si aucune n'est donnée."""
+    """Instancie un moteur par son nom, avec sa voix par défaut si aucune n'est donnée.
+
+    Les moteurs vivent dans l'extra « tts », absent d'une installation ordinaire — et
+    qu'un simple `uv sync` désinstalle au passage. L'erreur brute d'import ne nomme que
+    le module manquant, jamais le remède : on la traduit ici, une fois pour toutes.
+    """
     if name not in BACKENDS:
         raise ValueError(f"Moteur inconnu : {name!r}. Disponibles : {', '.join(BACKENDS)}")
     cls = BACKENDS[name]
-    return cls(voice or cls.default_voice, device)  # type: ignore[call-arg,attr-defined]
+    try:
+        return cls(voice or cls.default_voice, device)  # type: ignore[call-arg,attr-defined]
+    except ImportError as error:
+        raise RuntimeError(
+            f"Le moteur {name!r} n'est pas installé ({error.name} manquant). "
+            "Installez les moteurs de synthèse avec « uv sync --extra tts », ou "
+            "utilisez l'image Docker de l'ouvrier, qui les embarque."
+        ) from error
