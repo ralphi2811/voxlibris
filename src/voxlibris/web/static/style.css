@@ -106,6 +106,13 @@ table.projects td small { display: block; color: var(--ink-soft); font-size: .82
 .right { text-align: right; }
 code { font: .84em/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-soft); }
 
+/* La suppression est irréversible : elle se tient à l'écart des actions courantes,
+   discrète tant qu'on ne la cherche pas, franchement rouge au survol. */
+.actions-cell { display: flex; gap: .6rem; align-items: center; justify-content: flex-end; }
+.actions-cell form { margin: 0; }
+.danger-button { border-color: transparent; color: var(--ink-soft); padding: .5rem .7rem; }
+.danger-button:hover { border-color: var(--bad); color: var(--bad); }
+
 .tag { font-size: .75rem; padding: .15rem .5rem; border-radius: 999px; }
 .tag.warn { background: var(--accent-soft); color: var(--warn); }
 

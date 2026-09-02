@@ -126,9 +126,21 @@ def show_project(request: Request, name: str):
     )
 
 
-@app.delete("/projects/{name}")
+@app.post("/projects/{name}/delete")
 def delete_project(name: str):
-    shutil.rmtree(project_dir(name))
+    """Supprime un projet et tout ce qu'il contient.
+
+    POST plutôt que DELETE : un formulaire HTML ne sait envoyer que GET et POST, et
+    passer par du JavaScript pour un bouton relèverait de l'entêtement.
+
+    La suppression emporte le texte relu et les heures de synthèse — un livre de
+    quatre-vingt-dix minutes en demande vingt à produire. Une tâche en cours écrirait
+    d'ailleurs dans un dossier disparu : on refuse tant qu'elle n'est pas finie.
+    """
+    directory = project_dir(name)
+    if queue.active(name):
+        raise HTTPException(409, "Une tâche est en cours sur ce projet : attendez sa fin.")
+    shutil.rmtree(directory)
     return RedirectResponse("/", status_code=303)
 
 

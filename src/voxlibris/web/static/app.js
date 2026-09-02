@@ -55,7 +55,17 @@
     }, interval);
   }
 
+  // Un formulaire portant data-confirm demande son avis à l'utilisateur avant de partir.
+  // Sans JavaScript la suppression reste possible, sans garde-fou : c'est le compromis
+  // habituel, et il vaut mieux qu'un bouton qui ne ferait rien du tout.
+  function guard(form) {
+    form.addEventListener("submit", function (event) {
+      if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll("[data-poll]").forEach(start);
+    document.querySelectorAll("form[data-confirm]").forEach(guard);
   });
 })();

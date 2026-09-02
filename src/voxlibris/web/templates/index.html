@@ -36,13 +36,19 @@
       <td><code>{{ project.kind or "—" }}</code></td>
       <td>{{ project.status()["chapitres"] }}</td>
       <td>{{ project.voice or "—" }}</td>
-      <td class="right">
+      <td class="right actions-cell">
         {% set m4b = project.status()["m4b"] %}
         {% if m4b %}
           <a class="button" href="/projects/{{ name }}/files/{{ m4b.name }}">Télécharger</a>
         {% elif project.needs_review %}
           <span class="tag warn">à relire</span>
         {% endif %}
+        <form method="post" action="/projects/{{ name }}/delete"
+              data-confirm="Supprimer « {{ project.title }} » ? {{ project.status()['chapitres'] }} chapitre(s){% if m4b %}, le livre audio assemblé{% endif %} et le texte relu seront perdus.">
+          <button type="submit" class="ghost danger-button" title="Supprimer ce projet">
+            Supprimer
+          </button>
+        </form>
       </td>
     </tr>
     {% endfor %}

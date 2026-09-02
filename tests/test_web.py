@@ -108,6 +108,35 @@ class TestParcours:
         assert client.get("/projects/..%2F..%2Fetc").status_code == 404
 
 
+class TestSuppression:
+    def _create(self, client, make_epub):
+        path = make_epub(["Le départ", "La traversée"])
+        with path.open("rb") as handle:
+            client.post("/projects", files={"file": (path.name, handle)})
+        return "le-registre-du-gardien"
+
+    def test_supprime_et_revient_a_la_liste(self, client, make_epub):
+        name = self._create(client, make_epub)
+        response = client.post(f"/projects/{name}/delete")
+        assert response.status_code == 200  # redirection suivie
+        assert "Aucun projet" in response.text
+        assert client.get(f"/projects/{name}").status_code == 404
+
+    def test_refuse_pendant_une_tache(self, client, make_epub):
+        """Supprimer sous les pieds de l'ouvrier le ferait écrire dans le vide."""
+        name = self._create(client, make_epub)
+        client.post(f"/projects/{name}/jobs/normalize")
+
+        assert client.post(f"/projects/{name}/delete").status_code == 409
+        assert client.get(f"/projects/{name}").status_code == 200
+
+    def test_projet_inconnu(self, client):
+        assert client.post("/projects/fantome/delete").status_code == 404
+
+    def test_evasion_de_chemin_refusee(self, client):
+        assert client.post("/projects/..%2F..%2Fetc/delete").status_code == 404
+
+
 class TestRelecture:
     def _create(self, client, make_epub):
         path = make_epub(["Le départ", "La traversée"])
