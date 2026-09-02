@@ -36,6 +36,12 @@ class Project:
     needs_review: bool = False
     backend: str | None = None
     voice: str | None = None
+    # Débit de parole, et étirement de tous les silences. Les moteurs sont réglés pour
+    # la phrase de démonstration, pas pour une heure d'écoute : à l'oreille, la lecture
+    # court et la ponctuation s'efface. Ces deux réglages sont indépendants — la vitesse
+    # oblige à resynthétiser, les pauses seulement à repréparer les segments.
+    speed: float = 1.0
+    pause_scale: float = 1.0
     notes: dict = field(default_factory=dict)
 
     # --- Arborescence ---------------------------------------------------------------
@@ -99,6 +105,8 @@ class Project:
             "needs_review": self.needs_review,
             "backend": self.backend,
             "voice": self.voice,
+            "speed": self.speed,
+            "pause_scale": self.pause_scale,
             "notes": self.notes,
         }
         self.config_file.write_text(

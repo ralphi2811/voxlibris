@@ -118,7 +118,10 @@ def profile_for_voice(
     aveugle, soit bavard. La mesure est faite une fois par couple (moteur, voix), sur un
     échantillon de segments, puis mémorisée.
     """
-    key = f"{backend.name}/{getattr(backend, 'voice', 'default')}"
+    # La vitesse entre dans la clé : elle change le débit dans les mêmes proportions, et
+    # réutiliser une mesure faite à un autre réglage rendrait tous les seuils faux.
+    speed = getattr(backend, "speed", 1.0)
+    key = f"{backend.name}/{getattr(backend, 'voice', 'default')}@{speed:.2f}"
     known = json.loads(store.read_text(encoding="utf-8")) if store.exists() else {}
     if key in known:
         return QualityProfile(chars_per_second=known[key])

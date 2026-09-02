@@ -217,6 +217,22 @@ def chapter_page_image(name: str, number: int, page: int = 0):
 
 
 # --- Tâches -------------------------------------------------------------------------
+def _number(raw: object, low: float, high: float) -> float | None:
+    """Lit un réglage numérique du formulaire, borné. Renvoie None s'il est absent.
+
+    Une valeur illisible est traitée comme absente : le réglage précédent du projet est
+    alors conservé, plutôt que de faire échouer une tâche de vingt minutes sur une
+    virgule mal placée.
+    """
+    if raw in (None, ""):
+        return None
+    try:
+        return max(low, min(high, float(str(raw).replace(",", "."))))
+    except ValueError:
+        return None
+
+
+
 @app.post("/projects/{name}/jobs/{kind}")
 async def enqueue_job(request: Request, name: str, kind: str):
     load_project(name)
@@ -230,7 +246,10 @@ async def enqueue_job(request: Request, name: str, kind: str):
             "backend": str(form.get("backend", "xtts")),
             "voice": str(form.get("voice") or "") or None,
             "force": bool(form.get("force")),
+            "speed": _number(form.get("speed"), 0.7, 1.3),
         }
+    elif kind == "normalize":
+        params = {"pause_scale": _number(form.get("pause_scale"), 0.5, 3.0)}
     elif kind == "sample":
         picks = [str(v) for v in form.getlist("voice")]
         params = {

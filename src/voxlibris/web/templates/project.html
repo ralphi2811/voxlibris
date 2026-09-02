@@ -61,7 +61,17 @@
     <h2>2 · Préparer</h2>
     <p>Découpe le texte en segments, écrit les nombres en lettres et calcule les pauses.</p>
     <form method="post" action="/projects/{{ name }}/jobs/normalize">
+      <label>
+        Silences
+        <input type="number" name="pause_scale" step="0.1" min="0.5" max="3"
+               value="{{ project.pause_scale }}" style="width:5rem">
+        ×
+      </label>
       <button type="submit" {% if job %}disabled{% endif %}>Préparer les segments</button>
+      <p class="hint">
+        Augmentez si la ponctuation ne s'entend pas assez : 1,3 allonge d'un tiers tous
+        les silences. Sans effet sur la voix, et il n'y a rien à resynthétiser.
+      </p>
     </form>
     {% if status["segments"] %}<p class="done">{{ status["segments"] }} segments prêts.</p>{% endif %}
   </article>
@@ -111,10 +121,20 @@
         </select>
         <input type="text" name="voice" placeholder="voix" value="{{ project.voice or '' }}">
       </div>
+      <label>
+        Vitesse
+        <input type="number" name="speed" step="0.05" min="0.7" max="1.3"
+               value="{{ project.speed }}" style="width:5rem">
+        ×
+      </label>
       <label><input type="checkbox" name="force"> tout resynthétiser</label>
       <button type="submit" {% if job or not status["segments"] %}disabled{% endif %}>
         {% if project.pending_review %}Synthétiser quand même{% else %}Lancer la synthèse{% endif %}
       </button>
+      <p class="hint">
+        Sous 1×, la lecture ralentit. Changer la vitesse invalide ce qui est déjà
+        synthétisé : tout est refait, pour que le livre garde un débit constant.
+      </p>
     </form>
     {% if status["chapitres synthétisés"] %}
       <p class="done">{{ status["chapitres synthétisés"] }} chapitre(s) synthétisé(s).</p>

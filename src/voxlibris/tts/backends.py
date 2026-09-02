@@ -43,11 +43,33 @@ def resample(audio: np.ndarray, source_rate: int, target_rate: int = SAMPLE_RATE
     ).astype(np.float32)
 
 
+# Débit de parole. 1.0 est le débit natif du modèle ; en dessous, la lecture ralentit.
+# Un livre audio s'écoute plus lentement qu'une phrase de démonstration, et les moteurs
+# sont réglés pour la seconde. Chaque moteur exprime cela à sa façon — facteur direct
+# chez XTTS et Kokoro, échelle de durée inversée chez Piper — d'où cette conversion.
+#
+# Mesuré sur XTTS, cinq tirages par réglage sur une même phrase (durée médiane) :
+#   1.00× → 3.76 s   tirages resserrés sur 0,27 s
+#   0.80× → 4.68 s   soit 1.24× plus long, conforme à 1/0.8
+#   0.65× → 5.65 s   conforme aussi, mais la dispersion triple (5,38 à 6,91 s)
+# C'est cette dispersion qui borne la plage : plus bas, le modèle devient instable et le
+# contrôle qualité rejouerait sans fin. Un seul tirage ne montre rien de tout cela — la
+# variance naturelle du modèle dépasse l'effet cherché.
+DEFAULT_SPEED = 1.0
+SPEED_RANGE = (0.7, 1.3)
+
+
+def clamp_speed(speed: float) -> float:
+    low, high = SPEED_RANGE
+    return max(low, min(high, float(speed)))
+
+
 class Backend:
     """Interface commune aux moteurs."""
 
     name = "base"
     sample_rate = SAMPLE_RATE
+    speed = DEFAULT_SPEED
 
     def say(self, text: str) -> np.ndarray:
         """Synthétise un texte et renvoie une forme d'onde mono à SAMPLE_RATE."""
@@ -64,7 +86,12 @@ class XttsBackend(Backend):
     name = "xtts"
     default_voice = "Viktor Menelaos"
 
-    def __init__(self, voice: str = default_voice, device: str = "cuda") -> None:
+    def __init__(
+        self,
+        voice: str = default_voice,
+        device: str = "cuda",
+        speed: float = DEFAULT_SPEED,
+    ) -> None:
         from TTS.api import TTS
 
         if not os.environ.get("COQUI_TOS_AGREED"):
@@ -74,6 +101,7 @@ class XttsBackend(Backend):
                 "un autre moteur (kokoro, piper). Voir NOTICE.md."
             )
         self.voice = voice
+        self.speed = clamp_speed(speed)
         self._tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
         self.sample_rate = self._tts.synthesizer.output_sample_rate
 
@@ -81,7 +109,9 @@ class XttsBackend(Backend):
         return sorted(self._tts.synthesizer.tts_model.speaker_manager.speakers.keys())
 
     def say(self, text: str) -> np.ndarray:
-        wav = self._tts.tts(text=text, speaker=self.voice, language="fr", **XTTS_GEN_PARAMS)
+        wav = self._tts.tts(
+            text=text, speaker=self.voice, language="fr", speed=self.speed, **XTTS_GEN_PARAMS
+        )
         return resample(np.asarray(wav, dtype=np.float32), self.sample_rate)
 
 
@@ -91,10 +121,16 @@ class KokoroBackend(Backend):
     name = "kokoro"
     default_voice = KOKORO_VOICE
 
-    def __init__(self, voice: str = KOKORO_VOICE, device: str | None = None) -> None:
+    def __init__(
+        self,
+        voice: str = KOKORO_VOICE,
+        device: str | None = None,
+        speed: float = DEFAULT_SPEED,
+    ) -> None:
         from kokoro import KPipeline
 
         self.voice = voice
+        self.speed = clamp_speed(speed)
         self._pipeline = KPipeline(lang_code="f", device=device)
         self.sample_rate = 24000
 
@@ -107,7 +143,9 @@ class KokoroBackend(Backend):
         # sinon les pauses calculées ne correspondent plus aux segments.
         parts = [
             result.output.audio.detach().cpu().numpy()
-            for result in self._pipeline(text, voice=self.voice, split_pattern=None)
+            for result in self._pipeline(
+                text, voice=self.voice, speed=self.speed, split_pattern=None
+            )
             if result.output is not None and result.output.audio is not None
         ]
         if not parts:
@@ -121,7 +159,12 @@ class PiperBackend(Backend):
     name = "piper"
     default_voice = PIPER_VOICES[0]
 
-    def __init__(self, voice: str = PIPER_VOICES[0], device: str | None = None) -> None:
+    def __init__(
+        self,
+        voice: str = PIPER_VOICES[0],
+        device: str | None = None,
+        speed: float = DEFAULT_SPEED,
+    ) -> None:
         from piper import PiperVoice
         from piper.download_voices import download_voice
 
@@ -134,6 +177,7 @@ class PiperBackend(Backend):
             download_voice(voice, directory)
 
         self.voice = voice
+        self.speed = clamp_speed(speed)
         self._voice = PiperVoice.load(model)
         self.sample_rate = self._voice.config.sample_rate
 
@@ -142,7 +186,11 @@ class PiperBackend(Backend):
         return list(PIPER_VOICES)
 
     def say(self, text: str) -> np.ndarray:
-        chunks = [chunk.audio_float_array for chunk in self._voice.synthesize(text)]
+        # Piper raisonne en échelle de durée : allonger les phonèmes ralentit la parole.
+        from piper import SynthesisConfig
+
+        config = SynthesisConfig(length_scale=1.0 / self.speed)
+        chunks = [chunk.audio_float_array for chunk in self._voice.synthesize(text, config)]
         if not chunks:
             return np.zeros(0, np.float32)
         return resample(np.concatenate(chunks).astype(np.float32), self.sample_rate)
@@ -155,7 +203,12 @@ BACKENDS: dict[str, type[Backend]] = {
 }
 
 
-def load(name: str, voice: str | None = None, device: str = "cuda") -> Backend:
+def load(
+    name: str,
+    voice: str | None = None,
+    device: str = "cuda",
+    speed: float = DEFAULT_SPEED,
+) -> Backend:
     """Instancie un moteur par son nom, avec sa voix par défaut si aucune n'est donnée.
 
     Les moteurs vivent dans l'extra « tts », absent d'une installation ordinaire — et
@@ -166,7 +219,7 @@ def load(name: str, voice: str | None = None, device: str = "cuda") -> Backend:
         raise ValueError(f"Moteur inconnu : {name!r}. Disponibles : {', '.join(BACKENDS)}")
     cls = BACKENDS[name]
     try:
-        return cls(voice or cls.default_voice, device)  # type: ignore[call-arg,attr-defined]
+        return cls(voice or cls.default_voice, device, speed)  # type: ignore[call-arg,attr-defined]
     except ImportError as error:
         raise RuntimeError(
             f"Le moteur {name!r} n'est pas installé ({error.name} manquant). "

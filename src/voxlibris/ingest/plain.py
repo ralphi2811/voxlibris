@@ -23,6 +23,18 @@ MARKDOWN_HEADING = re.compile(r"^(#{1,3})\s+(.+?)\s*#*$")
 CHAPTER_WORD = re.compile(r"^\s*(chapitre|chapter|partie|livre|acte)\b", re.I)
 MAX_HEADING_CHARS = 70
 
+# Un texte tiré d'un PDF garde les pieds de page du livre imprimé. Personne ne les voit
+# en relisant à l'écran, et le moteur les lit pourtant à voix haute, au milieu d'une
+# phrase : « …des dédommagements. vingt-six CM deux P Page quarante-cinq. Malgré tout… »
+#
+# Deux formes se rencontrent. La ligne isolée ne portant qu'un numéro se reconnaît sans
+# risque. La seconde est soudée au texte : un nombre, les restes du gabarit d'impression,
+# puis « Page » et son numéro. On exige qu'elle suive une fin de phrase, commence par un
+# chiffre et s'achève sur « Page N » — sans quoi une mention légitime, « voir à la
+# page 45 », disparaîtrait elle aussi.
+PAGE_NUMBER_LINE = re.compile(r"^\s*(?:page\s*)?\d{1,4}\s*$", re.I)
+GLUED_FOOTER = re.compile(r"(?<=[.!?])\s*\d[0-9A-Za-z]{0,10}Page\s*\d{1,4}\b")
+
 
 def _looks_like_heading(line: str) -> bool:
     stripped = line.strip()
@@ -34,7 +46,8 @@ def _looks_like_heading(line: str) -> bool:
 
 
 def _split_blocks(text: str) -> list[str]:
-    return [re.sub(r"\s*\n\s*", " ", b).strip() for b in re.split(r"\n\s*\n", text) if b.strip()]
+    blocks = [re.sub(r"\s*\n\s*", " ", b).strip() for b in re.split(r"\n\s*\n", text) if b.strip()]
+    return [cleaned for block in blocks if (cleaned := GLUED_FOOTER.sub("", block).strip())]
 
 
 def ingest(path: Path, title: str = "", author: str = "Inconnu") -> Document:
@@ -63,6 +76,8 @@ def ingest(path: Path, title: str = "", author: str = "Inconnu") -> Document:
 
     lines = raw.splitlines()
     has_markdown = any(MARKDOWN_HEADING.match(line) for line in lines)
+    dropped = sum(1 for line in lines if PAGE_NUMBER_LINE.match(line))
+    lines = [line for line in lines if not PAGE_NUMBER_LINE.match(line)]
 
     for line in lines:
         heading = MARKDOWN_HEADING.match(line) if has_markdown else None
@@ -89,5 +104,5 @@ def ingest(path: Path, title: str = "", author: str = "Inconnu") -> Document:
         chapters=chapters,
         source=path,
         needs_review=False,
-        notes={"chapitrage": source},
+        notes={"chapitrage": source, "numéros de page retirés": dropped},
     )

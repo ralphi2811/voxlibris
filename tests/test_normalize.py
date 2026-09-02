@@ -85,17 +85,65 @@ class TestNombresEtCapitales:
 class TestDecoupe:
     def test_segments_sous_la_limite(self):
         paragraphe = " ".join(["Une phrase de longueur raisonnable."] * 40)
-        for segment in N.segment_paragraph(N.normalize(paragraphe)):
+        for segment, _ in N.segment_paragraph(N.normalize(paragraphe)):
             assert len(segment) <= N.MAX_CHARS
 
     def test_phrase_courte_non_decoupee(self):
         texte = "Une phrase unique et brève."
-        assert N.segment_paragraph(texte) == [texte]
+        assert N.segment_paragraph(texte) == [(texte, True)]
 
     def test_coupure_preferee_a_la_ponctuation_faible(self):
         # Une phrase trop longue se coupe sur ses virgules, pas au milieu des mots.
         longue = ", ".join(["un membre de phrase assez long pour compter"] * 8) + "."
         segments = N.segment_paragraph(longue)
         assert len(segments) > 1
-        assert all(len(s) <= N.MAX_CHARS for s in segments)
-        assert all(not s.endswith(" ") for s in segments)
+        assert all(len(s) <= N.MAX_CHARS for s, _ in segments)
+        assert all(not s.endswith(" ") for s, _ in segments)
+        # Seul le dernier fragment achève la phrase : les autres n'ont pas à recevoir
+        # le silence d'un point qu'ils ne portent pas.
+        assert [ends for _, ends in segments] == [False] * (len(segments) - 1) + [True]
+
+    def test_chaque_phrase_forme_son_segment(self):
+        """C'est ce qui rend le point audible : un vrai silence, pas celui du modèle."""
+        texte = " ".join(
+            [
+                "Le navire quitta le port au petit matin sous un ciel dégagé.",
+                "Les marins hissèrent les voiles en chantant à pleine voix.",
+                "La côte disparut lentement derrière eux dans la brume.",
+            ]
+        )
+        segments = N.segment_paragraph(texte)
+        assert len(segments) == 3
+        assert all(ends for _, ends in segments)
+
+    def test_phrase_trop_breve_rattachee_a_la_suivante(self):
+        """Synthétisée seule, une phrase de dix caractères part en vrille."""
+        texte = "Il partit. Le navire quitta le port au petit matin sous un ciel dégagé."
+        segments = N.segment_paragraph(texte)
+        assert len(segments) == 1
+        assert segments[0][0].startswith("Il partit.")
+
+    def test_le_seuil_ne_recolle_pas_des_phrases_ordinaires(self):
+        courte = "Les marins hissèrent les voiles en chantant."
+        assert len(courte) > N.MIN_SEGMENT_CHARS
+        assert N.segment_paragraph(f"{courte} {courte}") == [(courte, True), (courte, True)]
+
+
+class TestAnnonce:
+    def test_titre_repris_du_numero_non_redit(self):
+        """Un texte sans repère reçoit « Chapitre 1 » pour titre : ne pas le doubler."""
+        assert N.announce(1, "Chapitre 1") == "Chapitre un."
+        assert N.announce(3, "") == "Chapitre trois."
+
+    def test_vrai_titre_annonce(self):
+        assert N.announce(2, "Mort d'un personnage") == "Chapitre deux. Mort d'un personnage."
+
+
+class TestSilences:
+    def test_les_pauses_suivent_le_facteur(self):
+        paragraphes = ["Le navire quitta le port au petit matin sous un ciel dégagé."]
+        simple = N.build_chapter_segments(1, "Le départ", paragraphes)
+        etire = N.build_chapter_segments(1, "Le départ", paragraphes, pause_scale=1.5)
+        assert [r["pause_after_ms"] for r in etire] == [
+            int(round(r["pause_after_ms"] * 1.5)) for r in simple
+        ]

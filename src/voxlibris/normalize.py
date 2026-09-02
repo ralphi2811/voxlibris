@@ -31,9 +31,23 @@ from num2words import num2words
 # grande majorité des phrases passent d'un seul tenant.
 MAX_CHARS = 250
 
+# Regrouper plusieurs phrases dans un même segment revient à confier au modèle le soin
+# de marquer le point qui les sépare — et il l'expédie. La découpe suit donc les phrases,
+# de sorte que chaque point devienne un vrai silence, que l'on maîtrise.
+#
+# Une phrase très courte reste toutefois collée à la suivante : synthétisée seule, elle
+# a produit par le passé des énoncés fautifs (« Le bateau. », dix caractères, cinq
+# secondes de babil). C'est le seuil ci-dessous qui l'en empêche.
+#
+# Il vise ces fragments-là, et eux seuls. Placé trop haut — soixante caractères — il
+# recollait des phrases entières et rendait la découpe inutile ; le contrôle qualité,
+# lui, écarte déjà tout ce qui descend sous douze caractères.
+MIN_SEGMENT_CHARS = 30
+
 # Durée des silences insérés à la concaténation, en millisecondes.
-PAUSE_SEGMENT = 250  # entre deux segments d'un même paragraphe
-PAUSE_PARAGRAPH = 700  # entre deux paragraphes
+PAUSE_SEGMENT = 250  # entre deux fragments d'une même phrase trop longue
+PAUSE_SENTENCE = 380  # entre deux phrases — c'est lui qui fait entendre le point
+PAUSE_PARAGRAPH = 800  # entre deux paragraphes
 PAUSE_TITLE = 1200  # après l'annonce du chapitre
 PAUSE_ELLIPSIS = 450  # remplace des points de suspension en fin de segment
 
@@ -126,19 +140,31 @@ def hard_split(sentence: str) -> list[str]:
     return chunks
 
 
-def segment_paragraph(paragraph: str) -> list[str]:
-    """Regroupe les phrases en segments aussi longs que possible sous la limite."""
-    segments: list[str] = []
+def segment_paragraph(paragraph: str) -> list[tuple[str, bool]]:
+    """Découpe un paragraphe en segments, chacun marqué « finit une phrase » ou non.
+
+    Un segment par phrase, sauf quand la phrase est trop courte pour être synthétisée
+    seule — elle rejoint alors la suivante — ou trop longue pour le modèle, auquel cas
+    elle est fragmentée et seul le dernier fragment clôt la phrase. Le drapeau renvoyé
+    dit lequel des deux silences insérer.
+    """
+    segments: list[tuple[str, bool]] = []
     current = ""
     for sentence in split_sentences(paragraph):
-        for piece in hard_split(sentence):
+        pieces = hard_split(sentence)
+        for index, piece in enumerate(pieces):
+            last_piece = index == len(pieces) - 1
             if current and len(current) + 1 + len(piece) > MAX_CHARS:
-                segments.append(current)
+                segments.append((current, False))
                 current = piece
             else:
                 current = f"{current} {piece}".strip()
+            # On ne clôt la phrase que si le segment a de quoi tenir debout tout seul.
+            if last_piece and len(current) >= MIN_SEGMENT_CHARS:
+                segments.append((current, True))
+                current = ""
     if current:
-        segments.append(current)
+        segments.append((current, True))
     return segments
 
 
@@ -167,9 +193,15 @@ def defuse_ellipsis(segment: str) -> tuple[str, int]:
 def announce(chapter: int, title: str) -> str:
     if chapter == 0:
         return ""
+    spoken = f"Chapitre {num2words(chapter, lang='fr')}"
+    named = (title or "").strip().rstrip(".").strip()
+    # Un texte sans repère de chapitrage reçoit « Chapitre 1 » pour titre : l'annoncer
+    # par-dessus l'annonce donnerait « Chapitre un. Chapitre un. »
+    if not named or re.fullmatch(rf"chapitre\s*0*{chapter}", named, re.I):
+        named = ""
     # Le titre vient de l'en-tête YAML et n'a donc pas traversé normalize() : sans cet
     # appel, l'apostrophe typographique de « Mort d'un personnage » passe telle quelle.
-    return normalize(f"Chapitre {num2words(chapter, lang='fr')}. {title}.")
+    return normalize(f"{spoken}. {named}." if named else f"{spoken}.")
 
 
 def main() -> None:
@@ -189,26 +221,45 @@ def main() -> None:
 
 
 def build_chapter_segments(
-    chapter: int, title: str, paragraphs: list[str], announce_chapter: bool = True
+    chapter: int,
+    title: str,
+    paragraphs: list[str],
+    announce_chapter: bool = True,
+    pause_scale: float = 1.0,
 ) -> list[dict[str, object]]:
-    """Transforme les paragraphes d'un chapitre en segments prêts à synthétiser."""
+    """Transforme les paragraphes d'un chapitre en segments prêts à synthétiser.
+
+    `pause_scale` étire ou resserre tous les silences d'un même facteur. C'est le réglage
+    à toucher quand la ponctuation ne s'entend pas assez — il agit sans resynthétiser
+    quoi que ce soit, là où changer la vitesse oblige à tout refaire.
+    """
+    scale = max(0.25, min(4.0, float(pause_scale)))
+
+    def silence(base: int) -> int:
+        return int(round(base * scale))
+
     records: list[dict[str, object]] = []
     if announce_chapter and (header := announce(chapter, title)):
-        records.append({"idx": 0, "text": header, "pause_after_ms": PAUSE_TITLE})
+        records.append({"idx": 0, "text": header, "pause_after_ms": silence(PAUSE_TITLE)})
 
     for paragraph in paragraphs:
         segments = segment_paragraph(normalize(paragraph))
-        for index, segment in enumerate(segments):
+        for index, (segment, ends_sentence) in enumerate(segments):
             last = index == len(segments) - 1
             text, extra_pause = defuse_ellipsis(segment)
             if not text:
                 continue
+            if last:
+                base = PAUSE_PARAGRAPH
+            elif ends_sentence:
+                base = PAUSE_SENTENCE
+            else:
+                base = PAUSE_SEGMENT
             records.append(
                 {
                     "idx": len(records),
                     "text": text,
-                    "pause_after_ms": (PAUSE_PARAGRAPH if last else PAUSE_SEGMENT)
-                    + extra_pause,
+                    "pause_after_ms": silence(base) + silence(extra_pause),
                 }
             )
 
@@ -219,7 +270,10 @@ def build_chapter_segments(
 
 
 def build_segments(
-    text_dir: Path, out_dir: Path, announce_chapters: bool = True
+    text_dir: Path,
+    out_dir: Path,
+    announce_chapters: bool = True,
+    pause_scale: float = 1.0,
 ) -> dict[int, int]:
     """Écrit un JSONL de segments par chapitre ; renvoie le compte par chapitre."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -228,7 +282,7 @@ def build_segments(
         meta, paragraphs = read_chapter(path)
         chapter = int(meta["chapter"])
         records = build_chapter_segments(
-            chapter, meta["title"], paragraphs, announce_chapters
+            chapter, meta["title"], paragraphs, announce_chapters, pause_scale
         )
         target = out_dir / f"ch{chapter:02d}.jsonl"
         target.write_text(

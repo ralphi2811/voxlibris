@@ -34,8 +34,17 @@ def _request_stop(*_) -> None:
 
 
 def run_normalize(project: Project, job: Job, queue: Queue) -> None:
-    counts = build_segments(project.text_dir, project.segments_dir)
-    queue.report(job.id, 1.0, f"{sum(counts.values())} segments écrits")
+    if (scale := job.params.get("pause_scale")) is not None:
+        project.pause_scale = float(scale)
+        project.save()
+    counts = build_segments(
+        project.text_dir, project.segments_dir, pause_scale=project.pause_scale
+    )
+    queue.report(
+        job.id,
+        1.0,
+        f"{sum(counts.values())} segments écrits, silences à {project.pause_scale:g}×",
+    )
 
 
 def run_synth(project: Project, job: Job, queue: Queue) -> None:
@@ -51,14 +60,21 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     if not paths:
         raise RuntimeError("Aucun segment : lancer la normalisation d'abord.")
 
-    queue.report(job.id, 0.0, f"chargement du moteur {backend}")
-    engine = load(backend, voice, device)
+    # Le réglage précédent est relevé avant d'appliquer le nouveau : c'est leur écart qui
+    # décide s'il faut tout refaire. La vitesse compte au même titre que la voix — un
+    # livre dont la moitié des chapitres accélère serait pire qu'un livre trop rapide.
+    previous = f"{project.backend}/{project.voice}@{project.speed:.2f}"
+    if (wanted := job.params.get("speed")) is not None:
+        project.speed = float(wanted)
+
+    queue.report(job.id, 0.0, f"chargement du moteur {backend} à {project.speed:g}×")
+    engine = load(backend, voice, device, project.speed)
     chosen = getattr(engine, "voice", backend)
 
-    signature = f"{backend}/{chosen}"
-    changed = project.voice is not None and f"{project.backend}/{project.voice}" != signature
+    signature = f"{backend}/{chosen}@{project.speed:.2f}"
+    changed = project.voice is not None and previous != signature
     if changed:
-        queue.report(job.id, message="voix différente de la précédente : tout est resynthétisé")
+        queue.report(job.id, message="réglage différent du précédent : tout est resynthétisé")
     project.backend, project.voice = backend, chosen
     project.save()
 

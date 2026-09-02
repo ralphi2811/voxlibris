@@ -188,14 +188,27 @@ def bench_proofread(
 
 
 @app.command()
-def normalize(root: Path) -> None:
+def normalize(
+    root: Path,
+    pauses: float = typer.Option(
+        None, help="étire tous les silences (1.3 pour une ponctuation plus marquée)"
+    ),
+) -> None:
     """Prépare les segments à synthétiser à partir du texte faisant foi."""
     from .normalize import build_segments
 
     project = _open(root)
-    counts = build_segments(project.text_dir, project.segments_dir)
+    if pauses is not None:
+        project.pause_scale = pauses
+        project.save()
+    counts = build_segments(
+        project.text_dir, project.segments_dir, pause_scale=project.pause_scale
+    )
     total = sum(counts.values())
-    console.print(f"{total} segments écrits dans {project.segments_dir}")
+    console.print(
+        f"{total} segments écrits dans {project.segments_dir} "
+        f"(silences à {project.pause_scale:g}×)"
+    )
 
 
 @app.command()
@@ -214,6 +227,7 @@ def synth(
     voice: str = typer.Option(None, help="voix du moteur ; défaut selon le moteur"),
     chapters: str = typer.Option(None, help="liste de numéros, par exemple 1,2,3"),
     force: bool = typer.Option(False, help="resynthétiser même si le WAV existe"),
+    speed: float = typer.Option(None, help="débit de parole ; 0.9 pour ralentir"),
     device: str = typer.Option("cuda", help="cuda ou cpu"),
 ) -> None:
     """Synthétise les chapitres, avec contrôle qualité et reprise des ratés."""
@@ -228,15 +242,19 @@ def synth(
         wanted = {int(c) for c in chapters.split(",")}
         paths = [p for p in paths if int(p.stem.removeprefix("ch")) in wanted]
 
-    engine = load(backend, voice, device)
+    previous = f"{project.backend}/{project.voice}@{project.speed:.2f}"
+    if speed is not None:
+        project.speed = speed
+
+    engine = load(backend, voice, device, project.speed)
     chosen = getattr(engine, "voice", backend)
 
-    # Un changement de voix invalide tout : sans cela le livre changerait de narrateur
-    # en cours de route, sans le moindre avertissement.
-    signature = f"{backend}/{chosen}"
-    changed = project.voice is not None and f"{project.backend}/{project.voice}" != signature
+    # Un changement de voix ou de vitesse invalide tout : sans cela le livre changerait
+    # de narrateur — ou de débit — en cours de route, sans le moindre avertissement.
+    signature = f"{backend}/{chosen}@{project.speed:.2f}"
+    changed = project.voice is not None and previous != signature
     if changed:
-        console.print("[yellow]Voix différente de la précédente : tout est resynthétisé.[/yellow]")
+        console.print("[yellow]Réglage différent du précédent : tout est resynthétisé.[/yellow]")
     project.backend, project.voice = backend, chosen
     project.save()
 
@@ -245,7 +263,7 @@ def synth(
     )
     console.print(
         f"Moteur [bold]{backend}[/bold], voix [bold]{chosen}[/bold], "
-        f"débit calibré à {profile.chars_per_second} car/s.\n"
+        f"vitesse {project.speed:g}×, débit calibré à {profile.chars_per_second} car/s.\n"
     )
 
     warnings: list[str] = []
@@ -320,8 +338,16 @@ def run(
             "Passez par ingest, review, puis normalize."
         )
     Project.create(root, document)
-    normalize(root)
-    synth(root, backend=backend, voice=voice, chapters=None, force=False, device=device)
+    normalize(root, pauses=None)
+    synth(
+        root,
+        backend=backend,
+        voice=voice,
+        chapters=None,
+        force=False,
+        speed=None,
+        device=device,
+    )
     assemble(root, skip_mp3=False)
 
 
