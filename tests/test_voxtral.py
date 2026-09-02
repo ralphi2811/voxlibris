@@ -180,3 +180,34 @@ class TestModeration:
         )
         client = FakeClient({"/moderations": (body.encode(), "application/json")})
         assert client.moderate(["Je m'appelle Gabriel.", "Il faisait beau."]) == [["pii"], []]
+
+
+class TestLocal:
+    """Les mêmes poids servis par vLLM : même protocole, deux ou trois noms qui diffèrent."""
+
+    def test_adresse_locale_reconnue(self):
+        assert voxtral.Client(url="http://localhost:8600/v1").is_local
+        assert not voxtral.Client(key="k", url="https://api.mistral.ai/v1").is_local
+
+    def test_pas_de_cle_exigee_en_local(self, monkeypatch):
+        """La clé ne protégeait que d'un envoi à un tiers : en local, il n'y en a pas."""
+        monkeypatch.setenv("VOXLIBRIS_MISTRAL_API_KEY", "")
+        assert voxtral.Client(url="http://127.0.0.1:8600/v1").is_local
+
+    def test_le_champ_de_la_voix_change(self):
+        """vLLM attend « voice », l'API de Mistral « voice_id »."""
+        client = FakeClient({"/audio/speech": (make_wav(), "audio/wav")})
+        client.url = "http://localhost:8600/v1"
+        client.speak("Bonjour.", voice_id="fr_female")
+        envoi = client.calls[0][1]
+        assert envoi["voice"] == "fr_female" and "voice_id" not in envoi
+        assert envoi["model"] == voxtral.LOCAL_MODEL
+
+    def test_voix_locales_sans_requete(self):
+        """Les plongements sont livrés avec les poids : aucun catalogue à interroger."""
+        client = FakeClient({})
+        client.url = "http://localhost:8600/v1"
+        noms = [v["name"] for v in client.voices()]
+        assert "fr_female" in noms and "fr_male" in noms
+        assert not client.calls
+        assert voxtral.voice_names("fr", client=client) == ["fr_female", "fr_male"]

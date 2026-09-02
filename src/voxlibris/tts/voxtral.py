@@ -37,6 +37,8 @@ from ..config import setting
 
 DEFAULT_BASE_URL = "https://api.mistral.ai/v1"
 DEFAULT_MODEL = "voxtral-mini-tts-2603"
+# Servi par vLLM, le modèle porte le nom de son dépôt Hugging Face.
+LOCAL_MODEL = "mistralai/Voxtral-4B-TTS-2603"
 
 # L'API recommande de rester sous trois cents mots par requête. Nos segments plafonnent
 # à 250 caractères, soit une quarantaine de mots : la marge est confortable.
@@ -272,12 +274,18 @@ class Client:
                 verdicts.append(sorted(k for k, violated in categories.items() if violated))
         return verdicts
 
-    def speak(self, text: str, voice_id: str, model: str = DEFAULT_MODEL) -> tuple[np.ndarray, int]:
+    def speak(self, text: str, voice_id: str, model: str = "") -> tuple[np.ndarray, int]:
+        # Les deux services servent les mêmes poids sans nommer les choses pareil :
+        # l'API de Mistral désigne une voix enregistrée par « voice_id », vLLM un
+        # plongement livré avec le modèle par « voice ».
+        payload = {
+            "model": model or (LOCAL_MODEL if self.is_local else DEFAULT_MODEL),
+            "input": text,
+            "response_format": "wav",
+            "voice" if self.is_local else "voice_id": voice_id,
+        }
         try:
-            body, kind = self._request(
-                "/audio/speech",
-                {"model": model, "input": text, "voice_id": voice_id, "response_format": "wav"},
-            )
+            body, kind = self._request("/audio/speech", payload)
         except Refused as refus:
             # Le refus ne dit pas sur quoi il porte : on le lui rattache ici, faute de
             # quoi le journal signale un blocage sans montrer la phrase en cause.

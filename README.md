@@ -108,9 +108,16 @@ l'adresse change**, le code de voxlibris est le même.
 
 ```bash
 uv venv ~/.local/share/voxlibris-vllm/.venv
-uv pip install --python ~/.local/share/voxlibris-vllm/.venv/bin/python "vllm>=0.28" "vllm-omni>=0.28"
-~/.local/share/voxlibris-vllm/.venv/bin/vllm serve mistralai/Voxtral-4B-TTS-2603 --omni --port 8600
+uv pip install --python ~/.local/share/voxlibris-vllm/.venv/bin/python "vllm>=0.28" "vllm-omni>=0.28" ninja
+PATH="$HOME/.local/share/voxlibris-vllm/.venv/bin:$PATH" \
+  ~/.local/share/voxlibris-vllm/.venv/bin/vllm serve mistralai/Voxtral-4B-TTS-2603 \
+  --omni --port 8600 --gpu-memory-utilization 0.80
 ```
+
+`ninja` n'est pas facultatif : sans lui, vLLM compile un noyau de tri au démarrage et
+échoue sur un `FileNotFoundError: 'ninja'` enfoui à cinquante lignes d'une trace d'appels
+qui parle d'échec d'initialisation du moteur. Il lui faut aussi le CUDA Toolkit, pour
+`nvcc`.
 
 Puis dans le `.env` : `VOXLIBRIS_MISTRAL_BASE_URL=http://localhost:8600/v1`, et plus
 besoin de clé.
