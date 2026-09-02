@@ -129,3 +129,19 @@ class TestCalibrate:
 
     def test_refuse_un_echantillon_trop_maigre(self):
         assert quality.calibrate([("x" * 90, 5.0)] * 3) is None
+
+
+class TestVoixDuMoteur:
+    """Une voix appartient à un moteur : la confusion doit se dire, pas se subir."""
+
+    def test_voix_etrangere_refusee_avant_tout_chargement(self):
+        from voxlibris.tts.backends import UnknownVoice, load
+
+        with pytest.raises(UnknownVoice) as erreur:
+            load("kokoro", "Damien Black", "cpu")
+        assert "ff_siwis" in str(erreur.value)
+
+    def test_voix_connue_acceptee(self):
+        from voxlibris.tts.backends import BACKENDS
+
+        assert "fr_FR-tom-medium" in BACKENDS["piper"].catalogue

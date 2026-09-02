@@ -64,12 +64,33 @@ def clamp_speed(speed: float) -> float:
     return max(low, min(high, float(speed)))
 
 
+class UnknownVoice(RuntimeError):
+    """Voix inconnue du moteur retenu.
+
+    Le cas se produit sitôt qu'on change de moteur sans changer de voix, et ce qu'en
+    disent les moteurs est incompréhensible : Kokoro va chercher « Damien Black.pt » sur
+    un dépôt de modèles et rapporte une erreur 404. Autant nommer la vraie cause, et
+    donner les voix qui, elles, existent.
+    """
+
+    def __init__(self, backend: str, voice: str, available: list[str]) -> None:
+        shown = ", ".join(available[:12]) + (" …" if len(available) > 12 else "")
+        super().__init__(
+            f"Le moteur {backend!r} ne connaît pas la voix {voice!r}. "
+            f"Voix disponibles : {shown}"
+        )
+
+
 class Backend:
     """Interface commune aux moteurs."""
 
     name = "base"
     sample_rate = SAMPLE_RATE
     speed = DEFAULT_SPEED
+    # Voix connues d'avance, quand elles le sont. XTTS laisse ce catalogue vide : ses
+    # locuteurs ne se lisent qu'une fois le modèle chargé, et la vérification se fait
+    # alors dans son constructeur.
+    catalogue: tuple[str, ...] = ()
 
     def say(self, text: str) -> np.ndarray:
         """Synthétise un texte et renvoie une forme d'onde mono à SAMPLE_RATE."""
@@ -104,6 +125,8 @@ class XttsBackend(Backend):
         self.speed = clamp_speed(speed)
         self._tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
         self.sample_rate = self._tts.synthesizer.output_sample_rate
+        if voice not in self.voices():
+            raise UnknownVoice(self.name, voice, self.voices())
 
     def voices(self) -> list[str]:  # type: ignore[override]
         return sorted(self._tts.synthesizer.tts_model.speaker_manager.speakers.keys())
@@ -120,6 +143,7 @@ class KokoroBackend(Backend):
 
     name = "kokoro"
     default_voice = KOKORO_VOICE
+    catalogue = (KOKORO_VOICE,)
 
     def __init__(
         self,
@@ -158,6 +182,7 @@ class PiperBackend(Backend):
 
     name = "piper"
     default_voice = PIPER_VOICES[0]
+    catalogue = tuple(PIPER_VOICES)
 
     def __init__(
         self,
@@ -218,8 +243,13 @@ def load(
     if name not in BACKENDS:
         raise ValueError(f"Moteur inconnu : {name!r}. Disponibles : {', '.join(BACKENDS)}")
     cls = BACKENDS[name]
+    wanted = voice or cls.default_voice  # type: ignore[attr-defined]
+    # Vérifié avant d'instancier quand le catalogue est connu : charger huit gigaoctets
+    # de modèle pour découvrir ensuite que la voix n'existe pas serait une perte de temps.
+    if cls.catalogue and wanted not in cls.catalogue:
+        raise UnknownVoice(name, wanted, list(cls.catalogue))
     try:
-        return cls(voice or cls.default_voice, device, speed)  # type: ignore[call-arg,attr-defined]
+        return cls(wanted, device, speed)  # type: ignore[call-arg]
     except ImportError as error:
         raise RuntimeError(
             f"Le moteur {name!r} n'est pas installé ({error.name} manquant). "

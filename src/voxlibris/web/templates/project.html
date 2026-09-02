@@ -119,7 +119,10 @@
           <option value="{{ backend }}" {% if project.backend == backend %}selected{% endif %}>{{ backend }}</option>
           {% endfor %}
         </select>
-        <input type="text" name="voice" placeholder="voix" value="{{ project.voice or '' }}">
+        <input type="text" name="voice" id="voice"
+               placeholder="voix par défaut du moteur"
+               data-backend="{{ project.backend or '' }}"
+               value="{{ project.voice or '' }}">
       </div>
       <label>
         Vitesse
@@ -157,4 +160,22 @@
   </article>
 
 </section>
+
+<script>
+  // Une voix appartient à un moteur et à un seul. Laisser « Damien Black », qui est une
+  // voix XTTS, dans le champ après un passage à Kokoro conduisait celui-ci à chercher un
+  // fichier « Damien Black.pt » sur son dépôt de modèles, et à rapporter une erreur 404
+  // que rien ne rattachait à la cause. Changer de moteur vide donc le champ, sauf pour
+  // revenir à celui déjà retenu sur ce projet.
+  (function () {
+    var voice = document.getElementById("voice");
+    if (!voice) return;
+    var form = voice.form;
+    var backend = form.querySelector("select[name=backend]");
+    var original = voice.value;
+    backend.addEventListener("change", function () {
+      voice.value = backend.value === voice.dataset.backend ? original : "";
+    });
+  })();
+</script>
 {% endblock %}
