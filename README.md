@@ -86,6 +86,21 @@ produit et rejoue ceux qui sortent des clous :
 Chaque chapitre produit un manifeste `chNN.timing.json` reliant chaque instant du fichier
 au segment qui l'a produit. Entendez quelque chose à 12:34, retrouvez le segment fautif.
 
+## Moteurs de synthèse
+
+| Moteur | Où il tourne | Licence des poids | Pour quoi faire |
+|---|---|---|---|
+| **XTTS-v2** | GPU, ~4 Go | CPML, **non commercial** | La meilleure prosodie en français. Le défaut. |
+| **Kokoro-82M** | GPU ou processeur | Apache 2.0 | Rapide et très stable, une voix française. |
+| **Piper** | Processeur | MIT | Quasi instantané : idéal pour régler pauses et vitesse avant la version finale. |
+| **Voxtral TTS** | **API distante**, payante | CC BY-NC 4.0 | Neuf langues, sans carte graphique. |
+
+**Voxtral est le seul moteur distant** : le texte du livre est envoyé à Mistral, page
+après page. Il ne démarre pas sans `VOXLIBRIS_MISTRAL_API_KEY`, et n'est jamais choisi
+par défaut. Comptez 0,016 $ pour mille caractères — environ 1,30 $ pour un roman — que
+l'interface annonce avant de lancer la synthèse. L'API n'offre aucun réglage de débit :
+le réglage de vitesse y est sans effet, et le journal le dit plutôt que de l'ignorer.
+
 ## Démarrage
 
 ```bash

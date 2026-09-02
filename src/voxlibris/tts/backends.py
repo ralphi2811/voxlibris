@@ -9,6 +9,9 @@ Licences des modèles, très différentes les unes des autres, voir NOTICE.md :
   XTTS-v2  CPML, usage non commercial
   Kokoro   Apache 2.0
   Piper    MIT
+  Voxtral  CC BY-NC 4.0 pour les poids ; l'API, payante, autorise le commercial
+
+Voxtral est aussi le seul moteur distant : il envoie le texte du livre chez Mistral.
 """
 
 from __future__ import annotations
@@ -109,6 +112,9 @@ class Backend:
     name = "base"
     sample_rate = SAMPLE_RATE
     speed = DEFAULT_SPEED
+    # Tous les moteurs ne savent pas ralentir. Le dire permet à l'interface de ne pas
+    # proposer un réglage sans effet, plutôt que de l'ignorer en silence.
+    supports_speed = True
     # Voix connues d'avance, quand elles le sont. XTTS laisse ce catalogue vide : ses
     # locuteurs ne se lisent qu'une fois le modèle chargé, et la vérification se fait
     # alors dans son constructeur.
@@ -246,10 +252,52 @@ class PiperBackend(Backend):
         return resample(np.concatenate(chunks).astype(np.float32), self.sample_rate)
 
 
+class VoxtralBackend(Backend):
+    """Voxtral TTS — l'API de Mistral, payante, sans carte graphique."""
+
+    name = "voxtral"
+    default_voice = ""
+    # L'API ne prend aucun réglage de débit : la vitesse restera à 1, quoi qu'on demande.
+    supports_speed = False
+
+    def __init__(
+        self,
+        voice: str = "",
+        device: str | None = None,
+        speed: float = DEFAULT_SPEED,
+    ) -> None:
+        from .voxtral import Client, VoxtralError
+
+        self._client = Client()
+        # Le catalogue est celui du compte : voix fournies et voix clonées s'y mêlent, et
+        # il ne peut donc pas être connu d'avance comme celui de Piper.
+        self._voices = {v["name"]: v["id"] for v in self._client.voices() if v.get("name")}
+        if not self._voices:
+            raise VoxtralError(
+                "Aucune voix sur ce compte Mistral. Créez-en une depuis leur console, "
+                "ou choisissez une voix fournie."
+            )
+
+        chosen = resolve_voice(voice, list(self._voices)) if voice else next(iter(self._voices))
+        if chosen is None:
+            raise UnknownVoice(self.name, voice, list(self._voices))
+        self.voice = chosen
+        self.speed = DEFAULT_SPEED
+        self.sample_rate = SAMPLE_RATE
+
+    def voices(self) -> list[str]:  # type: ignore[override]
+        return sorted(self._voices)
+
+    def say(self, text: str) -> np.ndarray:
+        audio, rate = self._client.speak(text, self._voices[self.voice])
+        return resample(audio, rate)
+
+
 BACKENDS: dict[str, type[Backend]] = {
     "xtts": XttsBackend,
     "kokoro": KokoroBackend,
     "piper": PiperBackend,
+    "voxtral": VoxtralBackend,
 }
 
 

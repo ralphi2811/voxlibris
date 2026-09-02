@@ -256,11 +256,18 @@ def normalize(
 
 
 @app.command()
-def voices(backend: str = typer.Argument("xtts", help="xtts, kokoro ou piper")) -> None:
+def voices(backend: str = typer.Argument("xtts", help="xtts, kokoro, piper ou voxtral")) -> None:
     """Liste les voix disponibles pour un moteur."""
     from .tts.backends import load
 
-    for voice in load(backend).voices():
+    try:
+        found = load(backend).voices()
+    except Exception as error:
+        # Moteur non installé, clé absente, service injoignable : autant de causes
+        # ordinaires, dont le message importe bien plus que la pile d'appels.
+        console.print(f"[red]{error}[/red]")
+        raise typer.Exit(1) from error
+    for voice in found:
         console.print(voice)
 
 

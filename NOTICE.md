@@ -15,6 +15,22 @@ engage donc l'utilisateur au moment où il choisit de l'exécuter.
 | **XTTS-v2** (Coqui) | [CPML](https://coqui.ai/cpml) | **Usage non commercial uniquement** |
 | **Kokoro-82M** | Apache 2.0 | Aucune restriction d'usage |
 | **Piper** | MIT | Aucune restriction d'usage |
+| **Voxtral TTS** (Mistral) | CC BY-NC 4.0 | **Poids non commerciaux ; l'API, payante, l'autorise** |
+
+### Voxtral TTS : la restriction est à l'envers des autres
+
+Pour les trois premiers, voxlibris exécute des poids téléchargés sur votre machine. Pour
+Voxtral, il appelle l'API de Mistral, et **le texte du livre quitte donc la machine** :
+c'est le seul moteur dans ce cas, et c'est à ce titre qu'il n'est jamais choisi par
+défaut. Il ne démarre pas sans `VOXLIBRIS_MISTRAL_API_KEY`.
+
+La curiosité de ce modèle est que l'usage commercial passe par la voie payante, et non
+par les poids ouverts — l'inverse de XTTS, dont les poids sont gratuits mais restreints.
+Les conditions d'utilisation de l'API de Mistral s'appliquent, y compris son interdiction
+de cloner une voix sans autorisation.
+
+Pour un livre encore protégé, l'envoyer à un tiers n'est pas anodin : c'est une
+transmission, là où la synthèse locale reste une copie privée.
 
 ### ⚠️ XTTS-v2 est le moteur par défaut
 

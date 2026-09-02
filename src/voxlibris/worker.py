@@ -11,6 +11,7 @@ où celle-ci en pèse huit gigaoctets.
 
 from __future__ import annotations
 
+import json
 import logging
 import signal
 import time
@@ -78,6 +79,14 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     project.backend, project.voice = backend, chosen
     project.save()
 
+    if not engine.supports_speed and project.speed != 1.0:
+        queue.report(
+            job.id,
+            message=f"le moteur {backend} ne sait pas moduler le débit : vitesse ignorée",
+        )
+    if warning := remote_cost_warning(backend, paths):
+        queue.report(job.id, message=warning)
+
     profile = profile_for_voice(engine, load_segments(paths[0]), project.calibration_file)
     queue.report(job.id, message=f"débit calibré à {profile.chars_per_second} car/s")
 
@@ -106,6 +115,25 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
             queue.report(job.id, message=f"  {warning}")
     else:
         queue.report(job.id, message="contrôle qualité : aucun segment hors tolérance")
+
+
+def remote_cost_warning(backend: str, paths: list[Path]) -> str:
+    """Annonce la dépense avant de l'engager, pour un moteur facturé à l'usage.
+
+    Une synthèse dure des dizaines de minutes : découvrir la facture après coup serait
+    une mauvaise surprise, et le calcul ne coûte qu'une lecture des segments.
+    """
+    if backend != "voxtral":
+        return ""
+    from .tts.voxtral import estimate_cost
+
+    characters = sum(
+        len(json.loads(line)["text"]) for path in paths for line in path.open(encoding="utf-8")
+    )
+    return (
+        f"moteur distant : {characters:,} caractères seront envoyés à Mistral, "
+        f"soit environ {estimate_cost(characters):.2f} $".replace(",", " ")
+    )
 
 
 def run_proofread(project: Project, job: Job, queue: Queue) -> None:
