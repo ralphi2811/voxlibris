@@ -101,8 +101,31 @@ vous pouvez y ajouter une voix clonée depuis la console de Mistral, à partir d
 échantillon dont vous avez le droit de vous servir : leurs conditions interdisent de
 cloner quelqu'un sans son accord.
 
-**Voxtral est le seul moteur distant** : le texte du livre est envoyé à Mistral, page
-après page. Il ne démarre pas sans `VOXLIBRIS_MISTRAL_API_KEY`, et n'est jamais choisi
+### Voxtral chez vous plutôt que chez Mistral
+
+Les poids sont publics, et le serveur de vLLM parle le même protocole que l'API : **seule
+l'adresse change**, le code de voxlibris est le même.
+
+```bash
+uv venv ~/.local/share/voxlibris-vllm/.venv
+uv pip install --python ~/.local/share/voxlibris-vllm/.venv/bin/python "vllm>=0.28" "vllm-omni>=0.28"
+~/.local/share/voxlibris-vllm/.venv/bin/vllm serve mistralai/Voxtral-4B-TTS-2603 --omni --port 8600
+```
+
+Puis dans le `.env` : `VOXLIBRIS_MISTRAL_BASE_URL=http://localhost:8600/v1`, et plus
+besoin de clé.
+
+Comptez 8 Go de poids et 16 Go de mémoire vidéo. Le dépôt est sous conditions : il faut
+accepter la licence avec son compte Hugging Face. **vLLM s'installe dans son propre
+environnement** — sa version de PyTorch se querellerait avec celle de XTTS.
+
+Trois choses disparaissent du même coup : la facture, le filtre de modération — celui de
+l'API refuse des passages parfaitement littéraires, voir plus bas — et l'envoi du texte à
+un tiers. Les voix ne sont plus le catalogue du compte mais les plongements livrés avec
+les poids, dont `fr_female` et `fr_male`.
+
+**Voxtral en API est le seul moteur distant** : le texte du livre est envoyé à Mistral,
+page après page. Il ne démarre pas sans `VOXLIBRIS_MISTRAL_API_KEY`, et n'est jamais choisi
 par défaut. Comptez 0,016 $ pour mille caractères — environ 1,30 $ pour un roman — que
 l'interface annonce avant de lancer la synthèse. L'API n'offre aucun réglage de débit :
 le réglage de vitesse y est sans effet, et le journal le dit plutôt que de l'ignorer.

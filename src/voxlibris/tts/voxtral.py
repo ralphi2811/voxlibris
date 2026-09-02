@@ -79,6 +79,32 @@ class Refused(VoxtralError):
 MODERATION_MODEL = "mistral-moderation-latest"
 MODERATION_BATCH = 32
 
+# Voix livrées avec les poids, sous forme de plongements déjà calculés. Elles n'ont rien
+# à voir avec le catalogue de l'API — celui-ci décline des personnages en émotions, alors
+# que le dépôt range par langue. Deux d'entre elles sont françaises.
+LOCAL_VOICES = (
+    "fr_female",
+    "fr_male",
+    "neutral_female",
+    "neutral_male",
+    "casual_female",
+    "casual_male",
+    "cheerful_female",
+    "de_female",
+    "de_male",
+    "es_female",
+    "es_male",
+    "it_female",
+    "it_male",
+    "nl_female",
+    "nl_male",
+    "pt_female",
+    "pt_male",
+    "hi_female",
+    "hi_male",
+    "ar_male",
+)
+
 
 def api_key(env: dict[str, str] | None = None) -> str:
     if env is not None:
@@ -149,12 +175,24 @@ class Client:
         self.key = key or api_key()
         self.url = url or base_url()
         self.timeout = timeout
-        if not self.key:
+        if not self.key and not self.is_local:
             raise VoxtralError(
                 "Aucune clé d'API Mistral. Renseignez VOXLIBRIS_MISTRAL_API_KEY dans "
                 "votre .env — le texte du livre sera alors envoyé à Mistral. Voir "
-                "NOTICE.md."
+                "NOTICE.md. Pour faire tourner le modèle chez vous, pointez plutôt "
+                "VOXLIBRIS_MISTRAL_BASE_URL sur votre serveur local."
             )
+
+    @property
+    def is_local(self) -> bool:
+        """Vrai si le service tourne sur cette machine.
+
+        Les mêmes poids, servis par vLLM, parlent le même protocole : le code ne change
+        pas, seule l'adresse. Un serveur local n'a ni clé à vérifier, ni catalogue de
+        voix enregistrées, ni filtre de modération — c'est tout l'intérêt.
+        """
+        hosts = ("localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal")
+        return any(host in self.url for host in hosts)
 
     def _request(self, path: str, payload: dict | None = None) -> tuple[bytes, str]:
         headers = {"Authorization": f"Bearer {self.key}", "Accept": "application/json"}
@@ -188,6 +226,14 @@ class Client:
         sont ignorés en entrée. Ce sont `offset` et `limit` qui commandent, et `limit`
         est plafonné à cent.
         """
+        # Un serveur local ne tient pas de catalogue : les voix sont les plongements
+        # livrés avec les poids, et l'on ne peut que les nommer.
+        if self.is_local:
+            return [
+                {"id": name, "name": name, "languages": [name.split("_")[0]]}
+                for name in LOCAL_VOICES
+            ]
+
         found: list[dict] = []
         while True:
             body, _ = self._request(f"/audio/voices?offset={len(found)}&limit={PAGE_SIZE}")
