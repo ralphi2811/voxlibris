@@ -197,6 +197,33 @@ class Project:
 
         return self.invalidate_from(number)
 
+    def merge_into_previous(self, number: int) -> dict[str, int]:
+        """Recolle un chapitre au précédent, puis le supprime.
+
+        Une illustration pleine page suffit à couper un chapitre en deux dans un EPUB :
+        le fragment qui suit n'a ni titre ni début de phrase, et se ferait annoncer comme
+        un chapitre à part entière, au milieu d'un mot. Le rattacher est la seule issue —
+        aucune découpe automatique ne devinera qu'il fallait recoller là et pas ailleurs.
+        """
+        from .document import Chapter
+
+        if number <= 1:
+            raise ValueError("Le premier chapitre n'a pas de précédent.")
+
+        for directory in (self.raw_dir, self.clean_dir):
+            source = directory / f"ch{number:02d}.md"
+            target = directory / f"ch{number - 1:02d}.md"
+            if not (source.exists() and target.exists()):
+                continue
+            head = Chapter.from_markdown(target.read_text(encoding="utf-8"))
+            tail = Chapter.from_markdown(source.read_text(encoding="utf-8"))
+            head.paragraphs += tail.paragraphs
+            if head.source_pages and tail.source_pages:
+                head.source_pages = (head.source_pages[0], tail.source_pages[1])
+            target.write_text(head.to_markdown(), encoding="utf-8")
+
+        return self.delete_chapter(number)
+
     def invalidate_from(self, number: int) -> dict[str, int]:
         """Écarte les produits dérivés que la renumérotation a rendus faux."""
         counts = {"segments": 0, "pistes": 0, "assemblages": 0}

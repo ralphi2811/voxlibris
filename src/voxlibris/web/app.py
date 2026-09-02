@@ -207,16 +207,23 @@ def save_chapter(name: str, number: int, text: str = Form(...), title: str = For
     return RedirectResponse(f"/projects/{name}/review/{number}", status_code=303)
 
 
-@app.post("/projects/{name}/chapters/{number}/delete")
-def delete_chapter(name: str, number: int):
-    """Retire un chapitre du livre et renumérote les suivants."""
+@app.post("/projects/{name}/chapters/{number}/{action}")
+def edit_chapter(name: str, number: int, action: str):
+    """Retire un chapitre, ou le recolle au précédent. Les suivants sont renumérotés."""
+    if action not in {"delete", "merge"}:
+        raise HTTPException(404, "Action inconnue")
     project = load_project(name)
     if queue.active(name):
         raise HTTPException(409, "Une tâche est en cours sur ce projet : attendez sa fin.")
     try:
-        project.delete_chapter(number)
+        if action == "merge":
+            project.merge_into_previous(number)
+        else:
+            project.delete_chapter(number)
     except FileNotFoundError as error:
         raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
     return RedirectResponse(f"/projects/{name}", status_code=303)
 
 

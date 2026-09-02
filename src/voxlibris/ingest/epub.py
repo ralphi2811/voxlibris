@@ -33,6 +33,14 @@ MIN_CHAPTER_CHARS = 200
 BLOCK_TAGS = ("p", "div", "blockquote", "li")
 HEADING_TAGS = ("h1", "h2", "h3", "title")
 
+# « Chapitre 4 » ne nomme rien : c'est un rang, que l'annonce dit déjà, et qui contredit
+# le nôtre dès qu'un document s'intercale. On cherche donc un vrai titre derrière.
+GENERIC_TITLE = re.compile(r"^\s*chapitres?\s*\d+\s*$", re.I)
+
+# Beaucoup d'EPUB écrivent le titre du chapitre en simple paragraphe, sous un <h1> qui
+# ne porte que le rang. Bref, sans ponctuation finale : c'est à cela qu'on le reconnaît.
+MAX_TITLE_CHARS = 60
+
 
 def _toc_titles(book) -> dict[str, str]:
     """Associe chaque fichier de la table des matières à son intitulé.
@@ -92,6 +100,31 @@ def _document_title(soup: BeautifulSoup) -> str:
     return ""
 
 
+def _looks_like_title(text: str) -> bool:
+    return bool(text) and len(text) <= MAX_TITLE_CHARS and text[-1] not in ".!?;:,"
+
+
+def _pick_title(toc_title: str, soup: BeautifulSoup, paragraphs: list[str]) -> str:
+    """Retient le premier intitulé qui nomme vraiment le chapitre.
+
+    Le sommaire passe en premier, puis les titres du document, mais l'un comme l'autre
+    se réduisent souvent au rang. On regarde alors le premier paragraphe : « Louis
+    Braille » sous un « <h1>Chapitre 1</h1> » est le vrai titre. Il est retiré du corps
+    en même temps, sans quoi il serait lu deux fois — une fois annoncé, une fois lu.
+
+    Faute de mieux, le titre reste vide. Le remplacer par « Chapitre » suivi du rang
+    reviendrait à inventer une numérotation : ce livre-ci s'arrête au neuvième chapitre,
+    et trois pages d'annexes se retrouvaient annoncées comme les douzième, treizième et
+    quatorzième — de quoi croire qu'il en manquait.
+    """
+    for candidate in (toc_title, _document_title(soup)):
+        if candidate and not GENERIC_TITLE.match(candidate):
+            return candidate
+    if paragraphs and _looks_like_title(paragraphs[0]):
+        return paragraphs.pop(0)
+    return ""
+
+
 def _metadata(book, key: str, default: str = "") -> str:
     try:
         values = book.get_metadata("DC", key)
@@ -128,14 +161,13 @@ def ingest(path: Path, title: str = "", author: str = "") -> Document:
             skipped.append(f"{name} ({length} car.)")
             continue
 
-        heading = toc.get(name) or next(
+        listed_title = toc.get(name) or next(
             (t for href, t in toc.items() if name.endswith(href)), ""
-        ) or _document_title(soup)
-
+        )
         chapters.append(
             Chapter(
                 number=len(chapters) + 1,
-                title=clean_title(heading) or f"Chapitre {len(chapters) + 1}",
+                title=clean_title(_pick_title(listed_title, soup, paragraphs)),
                 paragraphs=paragraphs,
             )
         )

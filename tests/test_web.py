@@ -167,9 +167,31 @@ class TestChapitres:
         assert sorted(p.name for p in clean.glob("ch*.md")) == ["ch01.md", "ch02.md"]
         assert "chapter: 1" in (clean / "ch01.md").read_text(encoding="utf-8")
 
+    def test_recolle_au_precedent(self, client, make_epub, tmp_path):
+        """Une illustration coupe un chapitre en deux : le fragment se rattache."""
+        name = self._create(client, make_epub)
+        clean = tmp_path / "data" / name / "text" / "clean"
+        avant = (clean / "ch01.md").read_text(encoding="utf-8")
+        suite = (clean / "ch02.md").read_text(encoding="utf-8").split("---", 2)[-1].strip()
+
+        assert client.post(f"/projects/{name}/chapters/2/merge").status_code == 200
+        assert self._titles(client, name) == ["Avant-propos", "La traversée"]
+
+        fusionne = (clean / "ch01.md").read_text(encoding="utf-8")
+        assert avant.split("---", 2)[-1].strip() in fusionne
+        assert suite in fusionne
+
+    def test_le_premier_chapitre_na_pas_de_precedent(self, client, make_epub):
+        name = self._create(client, make_epub)
+        assert client.post(f"/projects/{name}/chapters/1/merge").status_code == 400
+
     def test_chapitre_inconnu(self, client, make_epub):
         name = self._create(client, make_epub)
         assert client.post(f"/projects/{name}/chapters/9/delete").status_code == 404
+
+    def test_action_inconnue(self, client, make_epub):
+        name = self._create(client, make_epub)
+        assert client.post(f"/projects/{name}/chapters/1/renommer").status_code == 404
 
     def test_refuse_pendant_une_tache(self, client, make_epub):
         name = self._create(client, make_epub)

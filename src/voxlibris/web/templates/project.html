@@ -30,7 +30,7 @@
       <li>
         <a href="/projects/{{ name }}/review/{{ chapter.number }}">
           <span class="num">{{ "%02d"|format(chapter.number) }}</span>
-          {{ chapter.title }}
+          {{ chapter.title or "Sans titre" }}
         </a>
         <small>
           {{ chapter.words }} mots
@@ -38,8 +38,14 @@
             {% if chapter.reviewed %}<span class="tick" title="relu">✓</span>
             {% else %}<span class="tag warn">à relire</span>{% endif %}
           {% endif %}
+          {% if not loop.first %}
+          <form method="post" action="/projects/{{ name }}/chapters/{{ chapter.number }}/merge"
+                data-confirm="Recoller ces {{ chapter.words }} mots à la fin du chapitre précédent ? À faire quand une illustration a coupé un chapitre en deux.">
+            <button type="submit" class="chip drop" title="recoller au chapitre précédent">↑</button>
+          </form>
+          {% endif %}
           <form method="post" action="/projects/{{ name }}/chapters/{{ chapter.number }}/delete"
-                data-confirm="Retirer « {{ chapter.title }} » ({{ chapter.words }} mots) ? Les chapitres suivants seront renumérotés, et il faudra les resynthétiser : leur annonce est gravée dans le son.">
+                data-confirm="Retirer « {{ chapter.title or 'Sans titre' }} » ({{ chapter.words }} mots) ? Les chapitres suivants seront renumérotés, et il faudra les resynthétiser : leur annonce est gravée dans le son.">
             <button type="submit" class="chip drop" title="retirer ce chapitre">×</button>
           </form>
         </small>

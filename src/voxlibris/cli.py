@@ -114,6 +114,25 @@ def drop_chapter(
     console.print(table)
 
 
+@app.command("merge-chapter")
+def merge_chapter(
+    root: Path,
+    number: int = typer.Argument(..., help="chapitre à recoller au précédent"),
+) -> None:
+    """Recolle un fragment au chapitre précédent — illustration ayant coupé le texte."""
+    project = _open(root)
+    try:
+        project.merge_into_previous(number)
+    except (FileNotFoundError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
+
+    console.print(f"Chapitre {number} recollé au {number - 1}.")
+    table = Table("Chapitre", "Mots", "Titre")
+    for state in project.chapter_states():
+        table.add_row(str(state["number"]), str(state["words"]), str(state["title"]) or "—")
+    console.print(table)
+
+
 @app.command("llm-check")
 def llm_check() -> None:
     """Vérifie que le modèle de langage configuré répond."""
