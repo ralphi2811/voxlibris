@@ -95,12 +95,11 @@ au segment qui l'a produit. Entendez quelque chose à 12:34, retrouvez le segmen
 | **Piper** | Processeur | MIT | Quasi instantané : idéal pour régler pauses et vitesse avant la version finale. |
 | **Voxtral TTS** | **API distante**, payante | CC BY-NC 4.0 | Neuf langues, sans carte graphique. |
 
-**Les voix fournies par Mistral sont toutes anglaises** (`Paul`, `Oliver`, `Jane`, en
-`en_us` et `en_gb`), alors même que le modèle sait lire le français. Pour un livre
-français, il faut donc créer une voix depuis la console de Mistral, à partir d'un
-échantillon dont vous avez le droit de vous servir — leurs conditions interdisent de
-cloner quelqu'un sans son accord. `voxlibris voices voxtral` liste ce que voit votre
-compte.
+Trente voix sont fournies, dont **six françaises** — « Marie », en six émotions, de
+`Neutral` à `Curious`. `voxlibris voices voxtral` liste celles que voit votre compte, et
+vous pouvez y ajouter une voix clonée depuis la console de Mistral, à partir d'un
+échantillon dont vous avez le droit de vous servir : leurs conditions interdisent de
+cloner quelqu'un sans son accord.
 
 **Voxtral est le seul moteur distant** : le texte du livre est envoyé à Mistral, page
 après page. Il ne démarre pas sans `VOXLIBRIS_MISTRAL_API_KEY`, et n'est jamais choisi

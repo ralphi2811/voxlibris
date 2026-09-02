@@ -91,8 +91,36 @@ class TestClient:
 
     def test_liste_des_voix(self):
         body = json.dumps({"items": [{"id": "a1", "name": "Ambre"}], "total": 1})
-        client = FakeClient({"/audio/voices": (body.encode(), "application/json")})
+        client = FakeClient(
+            {"/audio/voices?offset=0&limit=100": (body.encode(), "application/json")}
+        )
         assert client.voices() == [{"id": "a1", "name": "Ambre"}]
+
+    def test_toutes_les_pages_sont_lues(self):
+        """S'arrêter à la première page masquait les six voix françaises du catalogue."""
+        pages = {
+            f"/audio/voices?offset={offset}&limit=100": (
+                json.dumps(
+                    {"items": [{"id": f"v{offset}", "name": f"Voix {offset}"}], "total": 3}
+                ).encode(),
+                "application/json",
+            )
+            for offset in (0, 1, 2)
+        }
+        client = FakeClient(pages)
+        assert [v["name"] for v in client.voices()] == ["Voix 0", "Voix 1", "Voix 2"]
+
+    def test_page_vide_arrete_la_lecture(self):
+        """Un total incohérent ne doit pas faire tourner la boucle indéfiniment."""
+        client = FakeClient(
+            {
+                "/audio/voices?offset=0&limit=100": (
+                    json.dumps({"items": [], "total": 99}).encode(),
+                    "application/json",
+                )
+            }
+        )
+        assert client.voices() == []
 
     def test_sans_cle_rien_ne_part(self, monkeypatch):
         """Le refus de démarrer est ce qui garantit qu'aucun texte ne sort par mégarde."""

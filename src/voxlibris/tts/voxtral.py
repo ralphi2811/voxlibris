@@ -45,6 +45,10 @@ MAX_WORDS = 300
 # faire, jamais à facturer quoi que ce soit.
 PRICE_PER_1K_CHARS = 0.016
 
+# Taille de page demandée pour la liste des voix : l'API en sert dix par défaut, et
+# refuse au-delà de cent.
+PAGE_SIZE = 100
+
 
 class VoxtralError(RuntimeError):
     """L'API est injoignable, refuse la requête, ou répond ce qu'on n'attendait pas."""
@@ -122,11 +126,28 @@ class Client:
             raise VoxtralError(f"{self.url}{path} injoignable : {error}") from error
 
     def voices(self) -> list[dict]:
-        body, _ = self._request("/audio/voices")
-        try:
-            return list(json.loads(body).get("items", []))
-        except json.JSONDecodeError as error:
-            raise VoxtralError(f"Liste de voix illisible : {body[:200]!r}") from error
+        """Toutes les voix du compte, pagination comprise.
+
+        Deux pièges, découverts en interrogeant l'API plutôt qu'en lisant sa
+        documentation. Le premier : la liste est servie par dix, et s'en tenir à la
+        première donnait un catalogue exclusivement anglais — alors qu'il compte six voix
+        françaises. Une réponse pleine à ras bord est un signal, pas un catalogue.
+
+        Le second : la réponse annonce `page` et `total_pages`, mais ces paramètres-là
+        sont ignorés en entrée. Ce sont `offset` et `limit` qui commandent, et `limit`
+        est plafonné à cent.
+        """
+        found: list[dict] = []
+        while True:
+            body, _ = self._request(f"/audio/voices?offset={len(found)}&limit={PAGE_SIZE}")
+            try:
+                payload = json.loads(body)
+            except json.JSONDecodeError as error:
+                raise VoxtralError(f"Liste de voix illisible : {body[:200]!r}") from error
+            items = payload.get("items", [])
+            found += items
+            if not items or len(found) >= int(payload.get("total") or len(found)):
+                return found
 
     def speak(self, text: str, voice_id: str, model: str = DEFAULT_MODEL) -> tuple[np.ndarray, int]:
         body, kind = self._request(
