@@ -24,6 +24,8 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
+from .config import load_env
+
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_MODEL = "gemma4:12b"
 
@@ -69,7 +71,7 @@ class LLMConfig:
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> LLMConfig:
         if env is None:
-            _load_dotenv()
+            load_env()
             env = dict(os.environ)
         return cls(
             base_url=env.get("VOXLIBRIS_LLM_BASE_URL") or DEFAULT_BASE_URL,
@@ -85,19 +87,6 @@ class LLMConfig:
     @property
     def endpoint(self) -> str:
         return self.base_url.rstrip("/") + "/chat/completions"
-
-
-def _load_dotenv() -> None:
-    """Charge un `.env` s'il existe, sans écraser l'environnement déjà en place.
-
-    Les variables réellement exportées priment donc sur le fichier, ce qui permet à
-    Docker Compose et au shell de surcharger la configuration du dépôt.
-    """
-    try:
-        from dotenv import load_dotenv
-    except ImportError:  # pragma: no cover - dépendance optionnelle en développement
-        return
-    load_dotenv(override=False)
 
 
 class LLM:

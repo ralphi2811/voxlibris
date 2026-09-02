@@ -26,12 +26,13 @@ from __future__ import annotations
 import base64
 import io
 import json
-import os
 import urllib.error
 import urllib.request
 import wave
 
 import numpy as np
+
+from ..config import setting
 
 DEFAULT_BASE_URL = "https://api.mistral.ai/v1"
 DEFAULT_MODEL = "voxtral-mini-tts-2603"
@@ -50,13 +51,18 @@ class VoxtralError(RuntimeError):
 
 
 def api_key(env: dict[str, str] | None = None) -> str:
-    env = os.environ if env is None else env
-    return env.get("VOXLIBRIS_MISTRAL_API_KEY", "").strip()
+    if env is not None:
+        return env.get("VOXLIBRIS_MISTRAL_API_KEY", "").strip()
+    return setting("VOXLIBRIS_MISTRAL_API_KEY").strip()
 
 
 def base_url(env: dict[str, str] | None = None) -> str:
-    env = os.environ if env is None else env
-    return (env.get("VOXLIBRIS_MISTRAL_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+    raw = (
+        env.get("VOXLIBRIS_MISTRAL_BASE_URL", "")
+        if env is not None
+        else setting("VOXLIBRIS_MISTRAL_BASE_URL")
+    )
+    return (raw or DEFAULT_BASE_URL).rstrip("/")
 
 
 def estimate_cost(characters: int) -> float:
