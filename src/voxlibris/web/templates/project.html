@@ -38,6 +38,10 @@
             {% if chapter.reviewed %}<span class="tick" title="relu">✓</span>
             {% else %}<span class="tag warn">à relire</span>{% endif %}
           {% endif %}
+          <form method="post" action="/projects/{{ name }}/chapters/{{ chapter.number }}/delete"
+                data-confirm="Retirer « {{ chapter.title }} » ({{ chapter.words }} mots) ? Les chapitres suivants seront renumérotés, et il faudra les resynthétiser : leur annonce est gravée dans le son.">
+            <button type="submit" class="chip drop" title="retirer ce chapitre">×</button>
+          </form>
         </small>
       </li>
       {% endfor %}

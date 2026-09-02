@@ -135,6 +135,10 @@ class TestAnnonce:
         assert N.announce(1, "Chapitre 1") == "Chapitre un."
         assert N.announce(3, "") == "Chapitre trois."
 
+    def test_numero_discordant_ignore(self):
+        """Les tables des matières se trompent : « Chapitre six. Chapitre sept. » non."""
+        assert N.announce(6, "Chapitre 7") == "Chapitre six."
+
     def test_vrai_titre_annonce(self):
         assert N.announce(2, "Mort d'un personnage") == "Chapitre deux. Mort d'un personnage."
 

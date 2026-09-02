@@ -17,6 +17,7 @@ chapitre sans repartir de zéro.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -156,6 +157,61 @@ class Project:
             path.name: Chapter.from_markdown(path.read_text(encoding="utf-8")).text
             for path in sorted(self.text_dir.glob("ch*.md"))
         }
+
+    # --- Édition ----------------------------------------------------------------------
+    def delete_chapter(self, number: int) -> dict[str, int]:
+        """Supprime un chapitre et renumérote les suivants.
+
+        Les tables des matières se prennent souvent les pieds dans le tapis : une page de
+        copyright arrive en tête et devient « chapitre 1 », si bien que tout le livre est
+        décalé d'un cran. La voix annonce alors « Chapitre deux » avant un texte qui se
+        présente comme le premier. Aucune heuristique ne rattrapera tous les cas — ce
+        livre-ci numérote même deux chapitres « 7 » — et il faut donc pouvoir trancher
+        à la main.
+
+        Renuméroter invalide ce qui a été produit ensuite : les segments, et les pistes
+        des chapitres à partir de celui qu'on retire, dont l'annonce est gravée dans le
+        son. Les garder reviendrait à livrer un livre dont la voix se trompe de chapitre.
+        """
+        if not (self.raw_dir / f"ch{number:02d}.md").exists():
+            raise FileNotFoundError(f"Le chapitre {number} n'existe pas.")
+
+        for directory in (self.raw_dir, self.clean_dir):
+            if not directory.exists():
+                continue
+            (directory / f"ch{number:02d}.md").unlink(missing_ok=True)
+            for path in sorted(directory.glob("ch*.md")):
+                current = int(path.stem.removeprefix("ch"))
+                if current <= number:
+                    continue
+                # Seule la ligne de numéro change : le texte relu n'est pas réécrit.
+                text = re.sub(
+                    r"^chapter:\s*\d+",
+                    f"chapter: {current - 1}",
+                    path.read_text(encoding="utf-8"),
+                    count=1,
+                    flags=re.M,
+                )
+                path.write_text(text, encoding="utf-8")
+                path.rename(directory / f"ch{current - 1:02d}.md")
+
+        return self.invalidate_from(number)
+
+    def invalidate_from(self, number: int) -> dict[str, int]:
+        """Écarte les produits dérivés que la renumérotation a rendus faux."""
+        counts = {"segments": 0, "pistes": 0, "assemblages": 0}
+        for path in self.segments_dir.glob("ch*.jsonl"):
+            path.unlink()
+            counts["segments"] += 1
+        for path in self.wav_dir.glob("ch*"):
+            if int(path.name[2:4]) >= number:
+                path.unlink()
+                counts["pistes"] += 1
+        for pattern in ("*.m4b", "mp3/*.mp3"):
+            for path in self.out_dir.glob(pattern):
+                path.unlink()
+                counts["assemblages"] += 1
+        return counts
 
     # --- État -----------------------------------------------------------------------
     def chapter_states(self) -> list[dict[str, object]]:

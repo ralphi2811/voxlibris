@@ -132,7 +132,13 @@ ul.chapters { list-style: none; padding: 0; margin: 0; max-height: 22rem; overfl
 ul.chapters li { display: flex; justify-content: space-between; gap: .6rem; padding: .35rem 0; border-bottom: 1px solid var(--line); }
 ul.chapters a { text-decoration: none; }
 ul.chapters .num { color: var(--ink-soft); font-size: .8rem; margin-right: .4rem; }
-ul.chapters small { color: var(--ink-soft); font-size: .78rem; white-space: nowrap; }
+ul.chapters small { color: var(--ink-soft); font-size: .78rem; white-space: nowrap; display: flex; gap: .5rem; align-items: center; }
+ul.chapters form { margin: 0; display: inline; }
+/* Retirer un chapitre reste à portée sans s'imposer : la croix n'apparaît qu'au survol
+   de sa ligne, puisqu'on ne le fait qu'une fois, au moment de corriger un chapitrage. */
+.chip.drop { background: transparent; color: var(--ink-soft); padding: 0 .35rem; opacity: 0; }
+ul.chapters li:hover .chip.drop, .chip.drop:focus { opacity: 1; }
+.chip.drop:hover { color: var(--bad); }
 
 ul.samples { list-style: none; padding: 0; margin: 1rem 0 0; }
 ul.samples li { display: flex; flex-direction: column; gap: .2rem; margin-bottom: .7rem; font-size: .84rem; }

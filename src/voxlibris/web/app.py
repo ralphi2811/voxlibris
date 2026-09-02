@@ -207,6 +207,19 @@ def save_chapter(name: str, number: int, text: str = Form(...), title: str = For
     return RedirectResponse(f"/projects/{name}/review/{number}", status_code=303)
 
 
+@app.post("/projects/{name}/chapters/{number}/delete")
+def delete_chapter(name: str, number: int):
+    """Retire un chapitre du livre et renumérote les suivants."""
+    project = load_project(name)
+    if queue.active(name):
+        raise HTTPException(409, "Une tâche est en cours sur ce projet : attendez sa fin.")
+    try:
+        project.delete_chapter(number)
+    except FileNotFoundError as error:
+        raise HTTPException(404, str(error)) from error
+    return RedirectResponse(f"/projects/{name}", status_code=303)
+
+
 @app.get("/projects/{name}/page/{number}")
 def chapter_page_image(name: str, number: int, page: int = 0):
     """Rend une page du PDF d'origine, pour la relecture côte à côte."""

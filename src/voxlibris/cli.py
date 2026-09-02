@@ -89,6 +89,31 @@ def review(
     console.print(f"\n{len(suspects)} formes à vérifier.")
 
 
+@app.command("drop-chapter")
+def drop_chapter(
+    root: Path,
+    number: int = typer.Argument(..., help="numéro du chapitre à retirer"),
+) -> None:
+    """Retire un chapitre — page de copyright, annexe — et renumérote les suivants."""
+    project = _open(root)
+    try:
+        stale = project.delete_chapter(number)
+    except FileNotFoundError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    console.print(f"Chapitre {number} retiré ; les suivants ont reculé d'un rang.")
+    console.print(
+        f"Écarté car devenu faux : {stale['segments']} fichier(s) de segments, "
+        f"{stale['pistes']} piste(s), {stale['assemblages']} assemblage(s).\n"
+        "[yellow]Repassez par « normalize » puis « synth ».[/yellow]"
+    )
+
+    table = Table("Chapitre", "Mots", "Titre")
+    for state in project.chapter_states():
+        table.add_row(str(state["number"]), str(state["words"]), str(state["title"]))
+    console.print(table)
+
+
 @app.command("llm-check")
 def llm_check() -> None:
     """Vérifie que le modèle de langage configuré répond."""

@@ -195,9 +195,11 @@ def announce(chapter: int, title: str) -> str:
         return ""
     spoken = f"Chapitre {num2words(chapter, lang='fr')}"
     named = (title or "").strip().rstrip(".").strip()
-    # Un texte sans repère de chapitrage reçoit « Chapitre 1 » pour titre : l'annoncer
-    # par-dessus l'annonce donnerait « Chapitre un. Chapitre un. »
-    if not named or re.fullmatch(rf"chapitre\s*0*{chapter}", named, re.I):
+    # Un titre qui se réduit à « Chapitre N » n'est pas un titre : il ne dit rien que
+    # l'annonce ne dise déjà. Le numéro qu'il porte n'est d'ailleurs pas fiable — les
+    # tables des matières se trompent, en sautent, en répètent — et le suivre donnerait
+    # « Chapitre six. Chapitre sept. » On ne garde donc que les titres qui nomment.
+    if not named or re.fullmatch(r"chapitres?\s*\d+", named, re.I):
         named = ""
     # Le titre vient de l'en-tête YAML et n'a donc pas traversé normalize() : sans cet
     # appel, l'apostrophe typographique de « Mort d'un personnage » passe telle quelle.

@@ -137,6 +137,46 @@ class TestSuppression:
         assert client.post("/projects/..%2F..%2Fetc/delete").status_code == 404
 
 
+class TestChapitres:
+    def _create(self, client, make_epub):
+        path = make_epub(["Avant-propos", "Le départ", "La traversée"])
+        with path.open("rb") as handle:
+            client.post("/projects", files={"file": (path.name, handle)})
+        return "le-registre-du-gardien"
+
+    def _titles(self, client, name):
+        from voxlibris.project import Project
+        from voxlibris.web.jobs import workspace
+
+        return [s["title"] for s in Project.load(workspace() / name).chapter_states()]
+
+    def test_retire_et_renumerote(self, client, make_epub):
+        """Une page de copyright en tête décale tout le livre : il faut l'ôter."""
+        name = self._create(client, make_epub)
+        assert self._titles(client, name) == ["Avant-propos", "Le départ", "La traversée"]
+
+        response = client.post(f"/projects/{name}/chapters/1/delete")
+        assert response.status_code == 200  # redirection suivie
+        assert self._titles(client, name) == ["Le départ", "La traversée"]
+
+    def test_le_texte_relu_suit_la_renumerotation(self, client, make_epub, tmp_path):
+        name = self._create(client, make_epub)
+        client.post(f"/projects/{name}/chapters/1/delete")
+
+        clean = tmp_path / "data" / name / "text" / "clean"
+        assert sorted(p.name for p in clean.glob("ch*.md")) == ["ch01.md", "ch02.md"]
+        assert "chapter: 1" in (clean / "ch01.md").read_text(encoding="utf-8")
+
+    def test_chapitre_inconnu(self, client, make_epub):
+        name = self._create(client, make_epub)
+        assert client.post(f"/projects/{name}/chapters/9/delete").status_code == 404
+
+    def test_refuse_pendant_une_tache(self, client, make_epub):
+        name = self._create(client, make_epub)
+        client.post(f"/projects/{name}/jobs/normalize")
+        assert client.post(f"/projects/{name}/chapters/1/delete").status_code == 409
+
+
 class TestRelecture:
     def _create(self, client, make_epub):
         path = make_epub(["Le départ", "La traversée"])
