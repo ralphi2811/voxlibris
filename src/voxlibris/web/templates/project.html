@@ -90,12 +90,19 @@
     <h2>3 · Choisir la voix</h2>
     <p>Synthétise un même extrait avec plusieurs voix, pour trancher à l'oreille.</p>
     <form method="post" action="/projects/{{ name }}/jobs/sample">
-      <label><input type="checkbox" name="voice" value="xtts/Viktor Menelaos" checked> XTTS · Viktor Menelaos</label>
-      <label><input type="checkbox" name="voice" value="xtts/Damien Black" checked> XTTS · Damien Black</label>
-      <label><input type="checkbox" name="voice" value="xtts/Tammie Ema"> XTTS · Tammie Ema</label>
-      <label><input type="checkbox" name="voice" value="kokoro/ff_siwis"> Kokoro · ff_siwis</label>
-      <label><input type="checkbox" name="voice" value="piper/fr_FR-tom-medium"> Piper · tom</label>
+      {% for backend, voice, label, checked in candidates %}
+      <label>
+        <input type="checkbox" name="voice" value="{{ backend }}/{{ voice }}"
+               {% if checked %}checked{% endif %}> {{ label }}
+      </label>
+      {% endfor %}
       <button type="submit" {% if job or not status["segments"] %}disabled{% endif %}>Comparer</button>
+      {% if catalogues["voxtral"] %}
+      <p class="hint">
+        Voxtral est facturé à l'usage — quelques centimes pour un extrait, mais il envoie
+        le texte chez Mistral.
+      </p>
+      {% endif %}
     </form>
     {% if samples %}
     <ul class="samples">

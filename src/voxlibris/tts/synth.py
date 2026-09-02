@@ -16,7 +16,8 @@ from pathlib import Path
 import numpy as np
 
 from .backends import Backend
-from .quality import SAMPLE_RATE, QualityProfile, calibrate, render_with_fallback
+from .quality import SAMPLE_RATE, QualityProfile, Take, calibrate, render_with_fallback
+from .voxtral import Refused
 
 
 @dataclass
@@ -76,7 +77,17 @@ def synthesize_chapter(
     cursor = 0
 
     for segment in segments:
-        take, split = render_with_fallback(backend.say, segment.text, profile)
+        try:
+            take, split = render_with_fallback(backend.say, segment.text, profile)
+        except Refused as refus:
+            # Un moteur distant peut refuser une phrase, et il refusera les mêmes à
+            # chaque tentative. Abandonner tout le livre pour autant serait absurde :
+            # on laisse un silence, on le consigne, et le relecteur saura quoi reprendre.
+            warnings.append(
+                f"ch{segment.chapter:02d} segment {segment.idx} REFUSÉ "
+                f"({', '.join(refus.categories) or 'modération'}) — « {segment.text[:80]} »"
+            )
+            take, split = Take(np.zeros(0, np.float32), False, 1, "refusé"), False
 
         if not take.clean:
             warnings.append(

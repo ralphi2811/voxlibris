@@ -71,6 +71,55 @@ def render(request: Request, template: str, **context) -> HTMLResponse:
     return templates.TemplateResponse(request, template, context)
 
 
+_voxtral_cache: dict[str, list[str]] = {}
+
+
+def catalogues(language: str = "") -> dict[str, list[str]]:
+    """Voix proposables sans charger le moindre modèle, par moteur.
+
+    XTTS n'en fournit aucune : ses locuteurs ne se lisent qu'une fois les huit
+    gigaoctets en mémoire, ce que l'interface n'a pas à faire — d'où le champ libre qui
+    subsiste pour lui. Voxtral, lui, tient son catalogue derrière une simple requête ;
+    on la mémorise, car elle serait sinon refaite à chaque affichage de page.
+
+    Une absence de clé ou un service en panne ne laissent qu'une liste vide : on retombe
+    alors sur la saisie libre, plutôt que d'empêcher l'affichage du projet.
+    """
+    known = {name: list(cls.catalogue) for name, cls in BACKENDS.items()}
+    if language not in _voxtral_cache:
+        try:
+            from ..tts.voxtral import voice_names
+
+            _voxtral_cache[language] = voice_names(language)
+        except Exception:
+            _voxtral_cache[language] = []
+    known["voxtral"] = _voxtral_cache[language]
+    return known
+
+
+# Voix XTTS proposées d'emblée au banc d'essai. Elles ne peuvent pas être listées sans
+# charger le modèle, et ce sont de toute façon celles qui tiennent le français.
+XTTS_SUGGESTIONS = ("Viktor Menelaos", "Damien Black", "Tammie Ema")
+
+# Nombre de voix retenues par moteur : un banc d'essai de trente extraits ne se compare
+# pas à l'oreille, et chacun se paie chez Voxtral.
+PER_BACKEND = 4
+
+
+def sample_candidates(language: str = "") -> list[tuple[str, str, str, bool]]:
+    """Voix à proposer au banc d'essai : (moteur, voix, intitulé, cochée d'avance)."""
+    rows: list[tuple[str, str, str, bool]] = [
+        ("xtts", voice, f"XTTS · {voice}", index < 2)
+        for index, voice in enumerate(XTTS_SUGGESTIONS)
+    ]
+    for backend, voices in catalogues(language).items():
+        if backend == "xtts":
+            continue
+        for voice in voices[:PER_BACKEND]:
+            rows.append((backend, voice, f"{backend.capitalize()} · {voice}", False))
+    return rows
+
+
 # --- Projets ------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
@@ -117,10 +166,8 @@ def show_project(request: Request, name: str):
         job=queue.active(name),
         jobs=queue.list(name, limit=8),
         backends=sorted(BACKENDS),
-        # Les voix connues sans charger le moindre modèle. XTTS n'en fournit aucune :
-        # ses locuteurs ne se lisent qu'une fois les huit gigaoctets en mémoire, ce que
-        # l'interface n'a pas à faire — d'où le champ libre qui subsiste pour lui.
-        catalogues={name: list(cls.catalogue) for name, cls in BACKENDS.items()},
+        catalogues=catalogues(project.language),
+        candidates=sample_candidates(project.language),
         suggestions=len(load_suggestions(project)),
         samples=sorted((project.out_dir / "samples").glob("*.wav")),
     )

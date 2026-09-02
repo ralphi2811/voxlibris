@@ -26,6 +26,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import time
 import urllib.error
 import urllib.request
 import wave
@@ -52,6 +53,31 @@ PAGE_SIZE = 100
 
 class VoxtralError(RuntimeError):
     """L'API est injoignable, refuse la requête, ou répond ce qu'on n'attendait pas."""
+
+
+class Refused(VoxtralError):
+    """Un filtre de modération a refusé le texte.
+
+    C'est la limite propre au moteur distant, et elle n'a rien d'anecdotique : un
+    classificateur appliqué à de la littérature se trompe. Sur une biographie de Louis
+    Braille destinée aux enfants, il a refusé le passage décrivant les préjugés d'un
+    personnage à l'égard des aveugles — préjugés que le livre raconte pour les combattre.
+
+    Un moteur local ne connaît pas cette barrière. Elle est le prix de l'API.
+    """
+
+    def __init__(self, categories: list[str], text: str = "") -> None:
+        self.categories = categories
+        self.text = text
+        motifs = ", ".join(categories) or "motif non précisé"
+        super().__init__(f"texte refusé par la modération de Mistral ({motifs})")
+
+
+# Le service de modération, interrogeable seul. C'est ce qui permet de savoir en quelques
+# secondes ce qui sera refusé, plutôt que de le découvrir au bout de vingt minutes de
+# synthèse — et après avoir payé les segments qui, eux, sont passés.
+MODERATION_MODEL = "mistral-moderation-latest"
+MODERATION_BATCH = 32
 
 
 def api_key(env: dict[str, str] | None = None) -> str:
@@ -93,6 +119,29 @@ def decode_wav(raw: bytes) -> tuple[np.ndarray, int]:
     return audio, rate
 
 
+def _violated(body: str) -> list[str]:
+    """Extrait les catégories enfreintes d'un refus, quelle que soit sa profondeur."""
+    def dig(node) -> list[str]:
+        if isinstance(node, dict):
+            if "violated" in node:
+                return []
+            found = []
+            for key, value in node.items():
+                if isinstance(value, dict) and value.get("violated"):
+                    found.append(key)
+                else:
+                    found += dig(value)
+            return found
+        if isinstance(node, list):
+            return [name for item in node for name in dig(item)]
+        return []
+
+    try:
+        return sorted(set(dig(json.loads(body))))
+    except json.JSONDecodeError:
+        return []
+
+
 class Client:
     """Appels HTTP vers l'API audio de Mistral, sans dépendance ajoutée."""
 
@@ -120,8 +169,10 @@ class Client:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 return response.read(), response.headers.get_content_type()
         except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", "replace")[:300]
-            raise VoxtralError(f"{path} a répondu {error.code} : {detail}") from error
+            body = error.read().decode("utf-8", "replace")
+            if error.code == 403 and "guardrail" in body:
+                raise Refused(_violated(body)) from error
+            raise VoxtralError(f"{path} a répondu {error.code} : {body[:300]}") from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise VoxtralError(f"{self.url}{path} injoignable : {error}") from error
 
@@ -149,11 +200,43 @@ class Client:
             if not items or len(found) >= int(payload.get("total") or len(found)):
                 return found
 
+    def moderate(self, texts: list[str]) -> list[list[str]]:
+        """Catégories enfreintes pour chaque texte, sans rien synthétiser.
+
+        Se paie en jetons, non au caractère audio : vérifier un livre entier coûte une
+        fraction de centime, là où le découvrir en synthétisant coûte le prix des
+        segments déjà produits — et le temps passé à les produire.
+        """
+        verdicts: list[list[str]] = []
+        for start in range(0, len(texts), MODERATION_BATCH):
+            lot = texts[start : start + MODERATION_BATCH]
+            payload = {"model": MODERATION_MODEL, "input": lot}
+            # Un livre entier fait des dizaines de lots, et le service rend parfois un
+            # 503 passager. Y renoncer priverait de tout l'avertissement pour un hoquet.
+            for attempt in range(3):
+                try:
+                    body, _ = self._request("/moderations", payload)
+                    break
+                except VoxtralError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(2 * (attempt + 1))
+            for result in json.loads(body).get("results", []):
+                categories = result.get("categories", {})
+                verdicts.append(sorted(k for k, violated in categories.items() if violated))
+        return verdicts
+
     def speak(self, text: str, voice_id: str, model: str = DEFAULT_MODEL) -> tuple[np.ndarray, int]:
-        body, kind = self._request(
-            "/audio/speech",
-            {"model": model, "input": text, "voice_id": voice_id, "response_format": "wav"},
-        )
+        try:
+            body, kind = self._request(
+                "/audio/speech",
+                {"model": model, "input": text, "voice_id": voice_id, "response_format": "wav"},
+            )
+        except Refused as refus:
+            # Le refus ne dit pas sur quoi il porte : on le lui rattache ici, faute de
+            # quoi le journal signale un blocage sans montrer la phrase en cause.
+            refus.text = text
+            raise
         # Selon les versions, l'API rend le son encodé dans une enveloppe JSON ou tel
         # quel. On accepte les deux plutôt que de parier sur l'une.
         if kind == "application/json":
@@ -163,3 +246,27 @@ class Client:
                 raise VoxtralError(f"Réponse sans audio : {json.dumps(payload)[:200]}")
             body = base64.b64decode(encoded)
         return decode_wav(body)
+
+
+def voice_names(language: str = "", client: Client | None = None) -> list[str]:
+    """Noms des voix du compte, restreints à une langue quand on la connaît.
+
+    Trente voix dont six françaises : les proposer toutes pour un livre français serait
+    noyer le choix. Les voix sans langue déclarée — les voix clonées, notamment — sont
+    conservées, faute de savoir ce qu'elles valent et dans quelle langue.
+    """
+    wanted = language.lower()[:2]
+    names = [
+        voice["name"]
+        for voice in (client or Client()).voices()
+        if voice.get("name")
+        and (
+            not wanted
+            or not voice.get("languages")
+            or any(str(tag).lower().startswith(wanted) for tag in voice["languages"])
+        )
+    ]
+    # Le catalogue décline chaque personnage en émotions — « Marie - Angry », « Marie -
+    # Sad »… Un livre se lit d'une voix posée : la variante neutre passe donc devant, et
+    # devient le choix par défaut plutôt qu'un hasard alphabétique.
+    return sorted(names, key=lambda name: ("neutral" not in name.lower(), name))

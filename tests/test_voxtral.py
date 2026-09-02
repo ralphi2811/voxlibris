@@ -143,3 +143,40 @@ class TestMoteur:
 
         assert BACKENDS["voxtral"].supports_speed is False
         assert all(BACKENDS[name].supports_speed for name in ("xtts", "kokoro", "piper"))
+
+
+class TestModeration:
+    def test_categories_extraites_du_refus(self):
+        """Le corps d'un 403 imbrique les catégories : il faut aller les chercher."""
+        body = json.dumps(
+            {
+                "message": "Request blocked by guardrail policy",
+                "guardrails": [
+                    {
+                        "moderation_llm_v2": {
+                            "action": "block",
+                            "categories": {
+                                "sexual": {"violated": False},
+                                "hate_and_discrimination": {"violated": True},
+                            },
+                        }
+                    }
+                ],
+            }
+        )
+        assert voxtral._violated(body) == ["hate_and_discrimination"]
+
+    def test_corps_illisible_ne_casse_rien(self):
+        assert voxtral._violated("<html>503</html>") == []
+
+    def test_verdicts_par_lot(self):
+        body = json.dumps(
+            {
+                "results": [
+                    {"categories": {"pii": True, "sexual": False}},
+                    {"categories": {"pii": False}},
+                ]
+            }
+        )
+        client = FakeClient({"/moderations": (body.encode(), "application/json")})
+        assert client.moderate(["Je m'appelle Gabriel.", "Il faisait beau."]) == [["pii"], []]

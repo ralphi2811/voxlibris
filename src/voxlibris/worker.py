@@ -86,6 +86,8 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
         )
     if warning := remote_cost_warning(backend, paths):
         queue.report(job.id, message=warning)
+    for line in moderation_warnings(backend, paths):
+        queue.report(job.id, message=line)
 
     profile = profile_for_voice(engine, load_segments(paths[0]), project.calibration_file)
     queue.report(job.id, message=f"débit calibré à {profile.chars_per_second} car/s")
@@ -134,6 +136,52 @@ def remote_cost_warning(backend: str, paths: list[Path]) -> str:
         f"moteur distant : {characters:,} caractères seront envoyés à Mistral, "
         f"soit environ {estimate_cost(characters):.2f} $".replace(",", " ")
     )
+
+
+def moderation_warnings(backend: str, paths: list[Path], show: int = 5) -> list[str]:
+    """Signale d'avance les phrases que la modération du service va refuser.
+
+    Le contrôle porte sur le livre entier, coûte quelques secondes et une fraction de
+    centime — à comparer à une synthèse de vingt minutes interrompue à mi-parcours, les
+    segments déjà produits ayant été facturés.
+
+    Il ne bloque rien : c'est un avertissement. Sur une biographie de Louis Braille, le
+    classificateur a refusé le passage décrivant les préjugés d'un personnage envers les
+    aveugles, et pris « Je m'appelle Gabriel Gautier » pour une donnée personnelle. On ne
+    va pas empêcher quelqu'un de faire lire son livre pour cela.
+    """
+    if backend != "voxtral":
+        return []
+    from .tts.voxtral import Client, VoxtralError
+
+    segments = [
+        json.loads(line) for path in paths for line in path.open(encoding="utf-8")
+    ]
+    try:
+        verdicts = Client().moderate([s["text"] for s in segments])
+    except VoxtralError as error:
+        return [f"contrôle de modération impossible : {error}"]
+
+    refused = [
+        (segment, categories)
+        for segment, categories in zip(segments, verdicts, strict=False)
+        if categories
+    ]
+    if not refused:
+        return ["modération : aucun segment signalé"]
+
+    lines = [
+        f"[modération] {len(refused)} segment(s) sur {len(segments)} risquent d'être "
+        "refusés par Mistral ; ils seront remplacés par un silence et listés en fin de tâche"
+    ]
+    for segment, categories in refused[:show]:
+        lines.append(
+            f"  ch{segment['chapter']:02d} #{segment['idx']} [{', '.join(categories)}] "
+            f"« {segment['text'][:70]} »"
+        )
+    if len(refused) > show:
+        lines.append(f"  … et {len(refused) - show} autre(s)")
+    return lines
 
 
 def run_proofread(project: Project, job: Job, queue: Queue) -> None:
