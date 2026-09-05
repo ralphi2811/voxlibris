@@ -159,3 +159,19 @@ class TestVoixDuMoteur:
 
         assert resolve_voice("medium", PIPER_VOICES) is None
         assert resolve_voice("inexistante", PIPER_VOICES) is None
+
+
+class TestEchantillonDeCalibration:
+    def test_reparti_sur_tout_le_chapitre(self):
+        """Les douze premiers segments peuvent être une notice en anglais : on étale."""
+        from voxlibris.tts.synth import spread
+
+        picked = spread(list(range(100)), 12)
+        assert len(picked) == 12
+        assert picked[0] == 0 and picked[-1] >= 90
+        assert all(b - a >= 7 for a, b in zip(picked, picked[1:], strict=False))
+
+    def test_liste_courte_rendue_entiere(self):
+        from voxlibris.tts.synth import spread
+
+        assert spread([1, 2, 3], 12) == [1, 2, 3]

@@ -116,6 +116,21 @@ def synthesize_chapter(
     return ChapterResult(audio=audio, timing=timing, warnings=warnings)
 
 
+def spread(items: list, count: int) -> list:
+    """Prélève `count` éléments répartis sur toute la liste, plutôt que les premiers.
+
+    Un début de chapitre n'est pas représentatif : dédicace, épigraphe, ou — cas vécu —
+    la notice d'usage anglaise d'un EPUB Gutenberg. Calibrer le débit là-dessus a donné
+    13,3 caractères par seconde pour une voix qui en tient 19 sur du français, et le
+    contrôle qualité a ensuite rejoué 209 phrases courtes jugées « trop brèves » — trois
+    rendus par segment, une demi-heure de synthèse pour un chapitre.
+    """
+    if len(items) <= count:
+        return list(items)
+    step = len(items) / count
+    return [items[int(i * step)] for i in range(count)]
+
+
 def profile_for_voice(
     backend: Backend,
     segments: list[Segment],
@@ -139,7 +154,7 @@ def profile_for_voice(
 
     # Première passe avec les seuils par défaut, uniquement pour mesurer le débit.
     draft = QualityProfile()
-    long_enough = [s for s in segments if len(s.text) >= draft.min_chars][:sample_size]
+    long_enough = spread([s for s in segments if len(s.text) >= draft.min_chars], sample_size)
     measures: list[tuple[str, float]] = []
     for segment in long_enough:
         take, _ = render_with_fallback(backend.say, segment.text, draft)
