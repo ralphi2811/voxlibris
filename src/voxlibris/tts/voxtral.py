@@ -187,14 +187,18 @@ class Client:
 
     @property
     def is_local(self) -> bool:
-        """Vrai si le service tourne sur cette machine.
+        """Vrai si le service est auto-hébergé, c'est-à-dire n'importe quoi sauf Mistral.
 
         Les mêmes poids, servis par vLLM, parlent le même protocole : le code ne change
-        pas, seule l'adresse. Un serveur local n'a ni clé à vérifier, ni catalogue de
+        pas, seule l'adresse. Un serveur à soi n'a ni clé à vérifier, ni catalogue de
         voix enregistrées, ni filtre de modération — c'est tout l'intérêt.
+
+        Le critère est par exclusion, et il le faut : reconnaître « localhost » ne
+        suffisait pas, un conteneur joint son voisin par un nom de service — « voxtral »
+        — et le client le prenait alors pour l'API de Mistral, cherchant un catalogue de
+        compte qui n'existe pas.
         """
-        hosts = ("localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal")
-        return any(host in self.url for host in hosts)
+        return "api.mistral.ai" not in self.url
 
     def _request(self, path: str, payload: dict | None = None) -> tuple[bytes, str]:
         headers = {"Authorization": f"Bearer {self.key}", "Accept": "application/json"}

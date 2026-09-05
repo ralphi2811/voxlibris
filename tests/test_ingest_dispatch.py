@@ -118,3 +118,44 @@ class TestTexteBrut:
         path.write_text("Une phrase coupée\nsur deux lignes.\n\nUne autre.\n", encoding="utf-8")
         doc = T.ingest(path)
         assert doc.chapters[0].paragraphs[0] == "Une phrase coupée sur deux lignes."
+
+
+class TestGutenberg:
+    """L'enveloppe de Project Gutenberg tombe d'elle-même, à l'ingestion."""
+
+    def _doc(self):
+        from voxlibris.document import Chapter, Document
+
+        return Document(
+            title="Essai",
+            author="A.",
+            chapters=[
+                Chapter(1, "Notice", ["Title: Essai", "This eBook is for the use of anyone.",
+                                      "*** START OF THE PROJECT GUTENBERG EBOOK ESSAI ***",
+                                      "Il était une fois."]),
+                Chapter(2, "Suite", ["La suite du récit.", "Fin.",
+                                     "*** END OF THE PROJECT GUTENBERG EBOOK ESSAI ***",
+                                     "Section 1. General Terms of Use"]),
+                Chapter(3, "Licence", ["Blabla juridique."]),
+            ],
+        )
+
+    def test_preambule_et_licence_retires(self):
+        from voxlibris.document import strip_gutenberg
+
+        doc = self._doc()
+        removed = strip_gutenberg(doc)
+        assert [c.paragraphs for c in doc.chapters] == [
+            ["Il était une fois."],
+            ["La suite du récit.", "Fin."],
+        ]
+        assert [c.number for c in doc.chapters] == [1, 2]
+        assert removed == 6
+
+    def test_sans_enveloppe_rien_ne_bouge(self):
+        from voxlibris.document import Chapter, Document, strip_gutenberg
+
+        chapters = [Chapter(1, "Un", ["Bonjour.", "Au revoir."])]
+        doc = Document(title="T", author="A", chapters=chapters)
+        assert strip_gutenberg(doc) == 0
+        assert doc.chapters[0].paragraphs == ["Bonjour.", "Au revoir."]

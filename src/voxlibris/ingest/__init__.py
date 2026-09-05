@@ -18,7 +18,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 
-from ..document import Document
+from ..document import Document, strip_gutenberg
 
 
 class Kind(StrEnum):
@@ -93,4 +93,6 @@ def ingest(path: Path, **kwargs) -> Document:
         )
 
     document.notes["kind"] = kind.value
+    if dropped := strip_gutenberg(document):
+        document.notes["enveloppe Gutenberg retirée"] = f"{dropped} paragraphes"
     return document

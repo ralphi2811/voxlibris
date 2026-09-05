@@ -34,7 +34,9 @@ class FakeClient(voxtral.Client):
     """Le client, avec la couche HTTP remplacée par des réponses écrites d'avance."""
 
     def __init__(self, responses: dict[str, tuple[bytes, str]]):
-        self.key, self.url, self.timeout = "essai", "http://exemple.invalide/v1", 1.0
+        # Le faux tient lieu de l'API de Mistral : il en porte l'adresse, sans quoi il
+        # passerait pour un serveur auto-hébergé, sans clé ni catalogue.
+        self.key, self.url, self.timeout = "essai", voxtral.DEFAULT_BASE_URL, 1.0
         self.responses = responses
         self.calls: list[tuple[str, dict | None]] = []
 
@@ -191,6 +193,11 @@ class TestLocal:
     def test_adresse_locale_reconnue(self):
         assert voxtral.Client(url="http://localhost:8600/v1").is_local
         assert not voxtral.Client(key="k", url="https://api.mistral.ai/v1").is_local
+
+    def test_un_nom_de_service_est_auto_heberge(self):
+        """Dans Docker Compose, le serveur s'appelle « voxtral », pas « localhost »."""
+        assert voxtral.Client(url="http://voxtral:8600/v1").is_local
+        assert voxtral.Client(url="http://gpu-box.lan:8600/v1").is_local
 
     def test_pas_de_cle_exigee_en_local(self, monkeypatch):
         """La clé ne protégeait que d'un envoi à un tiers : en local, il n'y en a pas."""

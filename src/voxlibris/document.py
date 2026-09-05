@@ -114,3 +114,55 @@ def slugify(text: str) -> str:
     decomposed = unicodedata.normalize("NFKD", text)
     ascii_text = "".join(c for c in decomposed if not unicodedata.combining(c))
     return re.sub(r"[^\w\s-]", "", ascii_text).strip()
+
+
+# Project Gutenberg encadre chaque texte de ses propres pages : en tête, une notice
+# d'usage en anglais ; en queue, la licence complète, deux mille mots. Les deux sont
+# balisées, toujours de la même façon.
+GUTENBERG_START = re.compile(r"\*\*\*\s*START OF (THE|THIS) PROJECT GUTENBERG", re.I)
+GUTENBERG_END = re.compile(r"\*\*\*\s*END OF (THE|THIS) PROJECT GUTENBERG", re.I)
+
+
+def strip_gutenberg(document: Document) -> int:
+    """Retire l'enveloppe de Project Gutenberg, quand il y en a une.
+
+    Ce n'est pas qu'une question de propreté. Lue par une voix française, la notice
+    anglaise sort avec des durées erratiques, et le contrôle qualité la rejoue jusqu'à
+    cinq fois par segment avant d'y renoncer : sur un chapitre, un tiers des requêtes
+    au moteur ne servaient qu'à cela. Gutenberg est la première source de textes du
+    domaine public ; son enveloppe doit tomber d'elle-même.
+
+    Renvoie le nombre de paragraphes retirés. Un chapitre vidé disparaît, et les
+    suivants reculent d'un rang.
+    """
+    removed = 0
+    started = not any(
+        GUTENBERG_START.search(p) for c in document.chapters for p in c.paragraphs
+    )
+    kept: list[Chapter] = []
+    for chapter in document.chapters:
+        body: list[str] = []
+        for paragraph in chapter.paragraphs:
+            if not started:
+                removed += 1
+                started = bool(GUTENBERG_START.search(paragraph))
+                continue
+            if GUTENBERG_END.search(paragraph):
+                # Tout ce qui suit, ici et dans les chapitres d'après, est la licence.
+                removed += 1 + len(chapter.paragraphs) - len(body) - 1
+                removed += sum(len(c.paragraphs) for c in document.chapters[len(kept) + 1 :])
+                chapter.paragraphs = body
+                if body:
+                    kept.append(chapter)
+                for number, c in enumerate(kept, 1):
+                    c.number = number
+                document.chapters = kept
+                return removed
+            body.append(paragraph)
+        chapter.paragraphs = body
+        if body:
+            kept.append(chapter)
+    for number, c in enumerate(kept, 1):
+        c.number = number
+    document.chapters = kept
+    return removed
