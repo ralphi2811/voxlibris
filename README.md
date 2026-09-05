@@ -145,10 +145,32 @@ cp .env.example .env
 docker compose up
 ```
 
-L'interface est sur `http://localhost:8000`.
+L'interface est sur `http://localhost:8000`. Deux conteneurs tournent : l'interface,
+légère, et l'ouvrier, qui porte les moteurs de synthèse. Les projets vivent dans `./data`
+sur l'hôte — `VOXLIBRIS_DATA_DIR` dans le `.env` pour les mettre ailleurs.
 
-Le GPU est optionnel : sans lui, Piper et Kokoro tournent sur processeur. XTTS demande
-une carte NVIDIA (~4 Go de VRAM) et le paquet `nvidia-container-toolkit`.
+**Sans GPU**, Piper et Kokoro tournent sur processeur, et c'est ce que fait la commande
+ci-dessus. **Avec une carte NVIDIA** et `nvidia-container-toolkit`, empilez la surcharge
+qui la donne à l'ouvrier — XTTS en a besoin :
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+```
+
+Le serveur Voxtral local est un troisième service, sous profil, parce qu'il pèse 16 Go de
+mémoire vidéo et demande un jeton Hugging Face (`HF_TOKEN` dans le `.env`) :
+
+```bash
+docker compose --profile voxtral -f docker-compose.yml -f docker-compose.gpu.yml up
+```
+
+puis `VOXLIBRIS_MISTRAL_BASE_URL=http://voxtral:8600/v1` dans le `.env`. Pour joindre
+un Ollama installé sur la machine depuis les conteneurs, l'adresse est
+`http://host.docker.internal:11434/v1`.
+
+Les poids des modèles vont dans un volume nommé, `models`, et survivent aux
+reconstructions d'images. Les conteneurs tournent sous votre UID : rien de ce qu'ils
+écrivent dans `./data` n'appartient à root.
 
 ### En ligne de commande
 

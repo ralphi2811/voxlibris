@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import signal
 import time
 from pathlib import Path
@@ -55,7 +56,9 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     backend = job.params.get("backend", "xtts")
     voice = job.params.get("voice")
     force = bool(job.params.get("force"))
-    device = job.params.get("device", "cuda")
+    # Le périphérique par défaut vient de l'environnement : un conteneur sans GPU le
+    # fixe à « cpu », et Piper comme Kokoro y tournent sans rien changer d'autre.
+    device = job.params.get("device") or os.environ.get("VOXLIBRIS_DEVICE", "cuda")
 
     paths = sorted(project.segments_dir.glob("ch*.jsonl"))
     if not paths:
@@ -127,7 +130,11 @@ def remote_cost_warning(backend: str, paths: list[Path]) -> str:
     """
     if backend != "voxtral":
         return ""
-    from .tts.voxtral import estimate_cost
+    from .tts.voxtral import Client, estimate_cost
+
+    # Servi sur la machine, le même moteur ne facture rien : l'annonce serait fausse.
+    if Client().is_local:
+        return ""
 
     characters = sum(
         len(json.loads(line)["text"]) for path in paths for line in path.open(encoding="utf-8")
@@ -153,6 +160,10 @@ def moderation_warnings(backend: str, paths: list[Path], show: int = 5) -> list[
     if backend != "voxtral":
         return []
     from .tts.voxtral import Client, VoxtralError
+
+    # Le serveur local n'a pas de filtre de modération — c'est même tout son intérêt.
+    if Client().is_local:
+        return []
 
     segments = [
         json.loads(line) for path in paths for line in path.open(encoding="utf-8")
@@ -228,7 +239,8 @@ def run_sample(project: Project, job: Job, queue: Queue) -> None:
         backend, voice = choice["backend"], choice.get("voice")
         queue.report(job.id, index / len(choices), f"{backend} / {voice}")
         try:
-            engine = load(backend, voice, job.params.get("device", "cuda"))
+            device = job.params.get("device") or os.environ.get("VOXLIBRIS_DEVICE", "cuda")
+            engine = load(backend, voice, device)
             result = synthesize_chapter(engine, segments, QualityProfile())
             name = f"{backend}--{(voice or 'defaut').replace(' ', '_')}.wav"
             result.write(target_dir / name)

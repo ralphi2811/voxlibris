@@ -1,0 +1,9 @@
+# L'image de base fournit torch avec CUDA. Plusieurs paquets de synthèse déclarent
+# « torch » sans borne : sans ces contraintes, pip est libre de le remplacer par une roue
+# CPU, et la synthèse tombe trente fois plus lente sans la moindre erreur.
+torch==2.9.1
+torchaudio==2.9.1
+torchcodec>=0.8,<0.9
+
+# transformers 5 a retiré une fonction que coqui-tts importe encore.
+transformers<5

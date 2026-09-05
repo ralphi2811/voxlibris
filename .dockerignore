@@ -1,0 +1,22 @@
+# Ce qui ne doit jamais entrer dans une image : l'environnement local, les livres,
+# les sorties, les secrets. Les règles de droits d'auteur du .gitignore valent ici aussi.
+.git
+.venv
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+data/
+out/
+text/
+work/
+*.pdf
+*.epub
+*.m4b
+*.mp3
+*.wav
+.env
+# Les Dockerfiles restent dehors, sauf le fichier de contraintes que l'ouvrier copie.
+docker/
+!docker/worker.constraints.txt
+tests/

@@ -125,6 +125,9 @@ class TestClient:
     def test_sans_cle_rien_ne_part(self, monkeypatch):
         """Le refus de démarrer est ce qui garantit qu'aucun texte ne sort par mégarde."""
         monkeypatch.setenv("VOXLIBRIS_MISTRAL_API_KEY", "")
+        # Le .env de la machine peut viser un serveur local, qui n'exige pas de clé :
+        # le test fixe l'adresse distante, sans quoi il dépend de l'environnement.
+        monkeypatch.setenv("VOXLIBRIS_MISTRAL_BASE_URL", voxtral.DEFAULT_BASE_URL)
         with pytest.raises(voxtral.VoxtralError, match="Aucune clé"):
             voxtral.Client()
 

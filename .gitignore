@@ -18,6 +18,7 @@
 # sont réintroduits explicitement ci-dessous.
 *.pdf
 !samples/**/*.pdf
+!samples/**/*.epub
 
 # --- Python -----------------------------------------------------------------------
 __pycache__/

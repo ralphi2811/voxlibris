@@ -1,0 +1,85 @@
+# voxlibris — un « docker compose up » doit suffire.
+#
+#   docker compose up                                  interface + ouvrier, sans GPU
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#                                                      idem, avec la carte NVIDIA
+#   docker compose --profile voxtral ... up            ajoute le serveur Voxtral local
+#
+# Sans GPU, Piper et Kokoro tournent sur processeur ; XTTS et Voxtral en réclament un.
+# Les réglages (modèle de langage, clés, licence XTTS) viennent du fichier .env : copiez
+# .env.example et adaptez-le.
+
+x-common: &common
+  # Sans cela, tout ce que les conteneurs écrivent dans ./data appartient à root sur
+  # l'hôte, et n'est ni modifiable ni supprimable sans sudo.
+  user: "${UID:-1000}:${GID:-1000}"
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    VOXLIBRIS_DATA: /data
+  volumes:
+    # Les projets restent sur l'hôte, dans ./data ou le dossier de votre choix.
+    - ${VOXLIBRIS_DATA_DIR:-./data}:/data
+  # Un Ollama installé sur la machine se joint par host.docker.internal.
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+services:
+  web:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    image: voxlibris-web
+    ports:
+      - "${VOXLIBRIS_PORT:-8000}:8000"
+    depends_on:
+      - worker
+
+  worker:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    image: voxlibris-worker
+    volumes:
+      - ${VOXLIBRIS_DATA_DIR:-./data}:/data
+      # Les poids pèsent des gigaoctets : un volume nommé leur évite d'être
+      # retéléchargés à chaque reconstruction de l'image.
+      - models:/models
+    environment:
+      VOXLIBRIS_DATA: /data
+      # « cuda » quand la surcharge GPU est chargée, « cpu » sinon.
+      VOXLIBRIS_DEVICE: ${VOXLIBRIS_DEVICE:-cpu}
+
+  # Voxtral TTS chez vous. Facultatif — profil « voxtral » — et exigeant : 16 Go de
+  # mémoire vidéo, 8 Go de poids, un jeton Hugging Face (HF_TOKEN dans le .env) dont
+  # le compte a accepté la licence. Puis, dans le .env :
+  #   VOXLIBRIS_MISTRAL_BASE_URL=http://voxtral:8600/v1
+  voxtral:
+    profiles: ["voxtral"]
+    build:
+      context: .
+      dockerfile: docker/voxtral.Dockerfile
+    image: voxlibris-voxtral
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Évite la compilation d'un noyau de tri au démarrage, qui réclame nvcc.
+      VLLM_USE_FLASHINFER_SAMPLER: "0"
+    volumes:
+      - models:/models
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  models:
