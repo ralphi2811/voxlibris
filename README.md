@@ -170,7 +170,29 @@ un Ollama installé sur la machine depuis les conteneurs, l'adresse est
 
 Les poids des modèles vont dans un volume nommé, `models`, et survivent aux
 reconstructions d'images. Les conteneurs tournent sous votre UID : rien de ce qu'ils
-écrivent dans `./data` n'appartient à root.
+écrivent dans `./data` n'appartient à root. **Si votre identifiant n'est pas 1000**,
+dites-le à Compose — les shells ne l'exportent pas :
+
+```bash
+printf 'UID=%s\nGID=%s\n' "$(id -u)" "$(id -g)" >> .env
+```
+
+Le premier `up` construit les images, et l'ouvrier est lourd — c'est PyTorch avec CUDA :
+
+| Image | Taille | Contenu |
+|---|---|---|
+| `voxlibris-web` | 0,5 Go | l'interface |
+| `voxlibris-worker` | 15 Go | PyTorch, les moteurs, Tesseract, ffmpeg |
+| `voxlibris-voxtral` | 30 Go | vLLM, profil `voxtral` seulement |
+
+Les poids eux-mêmes se téléchargent à la première synthèse, dans le volume `models`.
+
+La ligne de commande passe par le même ouvrier ; les fichiers doivent être sous `./data`,
+qui est `/data` dans le conteneur :
+
+```bash
+docker compose run --rm worker voxlibris ingest /data/livre.epub --out /data/projet
+```
 
 ### En ligne de commande
 
