@@ -588,7 +588,12 @@ def save_chapter(name: str, number: int, text: str = Form(...), title: str = For
     chapter.paragraphs = [p.strip() for p in text.replace("\r\n", "\n").split("\n\n") if p.strip()]
 
     project.clean_dir.mkdir(parents=True, exist_ok=True)
-    (project.clean_dir / f"ch{number:02d}.md").write_text(chapter.to_markdown(), encoding="utf-8")
+    target = project.clean_dir / f"ch{number:02d}.md"
+    content = chapter.to_markdown()
+    # Enregistrer sans rien changer ne date pas le fichier : la date du texte sert à
+    # signaler une correction faite après la préparation, pas un simple passage.
+    if not target.exists() or target.read_text(encoding="utf-8") != content:
+        target.write_text(content, encoding="utf-8")
     return RedirectResponse(f"/projects/{name}/review/{number}", status_code=303)
 
 

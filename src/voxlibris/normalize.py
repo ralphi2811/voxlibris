@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -292,6 +293,10 @@ def build_segments(
         # changement, et c'est elle qui dira à la synthèse si la piste est à refaire.
         if not target.exists() or target.read_text(encoding="utf-8") != content:
             target.write_text(content, encoding="utf-8")
+        else:
+            # Rien à réécrire, mais la préparation a bien eu lieu : sa date sert à savoir
+            # si le texte a été corrigé depuis.
+            os.utime(target)
         counts[chapter] = len(records)
     return counts
 

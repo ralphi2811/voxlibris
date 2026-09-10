@@ -247,3 +247,9 @@ tr.context .passage { margin: 0 0 8px; font-size: 15px; line-height: 1.55; max-w
 tr.context mark { background: var(--warn-soft); color: var(--ink); padding: 0 3px; border-radius: 3px; }
 
 .w300 { width: 300px; }
+
+/* --- Marche à suivre --------------------------------------------------------------------- */
+.notice { display: flex; gap: 14px; padding: 16px 20px; border-color: var(--warn); background: var(--warn-soft); }
+.notice .ic-wrap { color: var(--warn); flex: none; margin-top: 2px; }
+.notice ol { margin: 4px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.stack.tight { gap: 6px; }

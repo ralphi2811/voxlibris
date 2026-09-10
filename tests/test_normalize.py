@@ -154,8 +154,9 @@ class TestSilences:
 
 
 class TestReecriture:
-    def test_un_contenu_identique_garde_sa_date(self, tmp_path):
-        """La date du fichier de segments signale un vrai changement, pas un simple passage."""
+    def test_un_contenu_identique_est_date_sans_etre_reecrit(self, tmp_path):
+        """Repréparer date le fichier même sans changement : c'est la date de préparation,
+        celle qui dit si le texte a été corrigé depuis. Le contenu, lui, ne bouge pas."""
         import os
         import time
 
@@ -169,15 +170,17 @@ class TestReecriture:
         )
         build_segments(text_dir, out_dir)
         target = out_dir / "ch01.jsonl"
+        before = target.read_bytes()
         ancien = time.time() - 3600
         os.utime(target, (ancien, ancien))
 
         build_segments(text_dir, out_dir)
-        assert abs(target.stat().st_mtime - ancien) < 1
+        assert target.read_bytes() == before
+        assert target.stat().st_mtime > ancien + 1
 
         (text_dir / "ch01.md").write_text(
             "---\nchapter: 1\ntitle: Un\n---\n\nIl pleuvait ce matin-là.\n",
             encoding="utf-8",
         )
         build_segments(text_dir, out_dir)
-        assert target.stat().st_mtime > ancien + 1
+        assert target.read_bytes() != before

@@ -315,6 +315,49 @@ class Project:
         except ValueError:
             return []
 
+    def text_path(self, number: int) -> Path:
+        """Le texte qui fait foi pour un chapitre : relu s'il existe, brut sinon."""
+        name = f"ch{number:02d}.md"
+        return (self.clean_dir / name) if (self.clean_dir / name).exists() else self.raw_dir / name
+
+    def segment_texts(self, number: int) -> list[tuple[int, str]]:
+        path = self.segments_dir / f"ch{number:02d}.jsonl"
+        if not path.exists():
+            return []
+        records = (
+            json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line
+        )
+        return [(int(r.get("idx", 0)), str(r.get("text", ""))) for r in records]
+
+    def track_matches(self, number: int) -> bool:
+        """Vrai si la piste dit exactement le texte des segments préparés.
+
+        C'est le contenu qui décide, pas les dates : une préparation qui n'a rien changé
+        ne périme aucune piste, et une piste ne peut pas passer pour à jour si un
+        segment a changé sous elle.
+        """
+        timing = self.timing(number)
+        if not timing or not (self.wav_dir / f"ch{number:02d}.wav").exists():
+            return False
+        said = [(int(e.get("idx", 0)), str(e.get("text", ""))) for e in timing]
+        return said == self.segment_texts(number)
+
+    def text_changed(self, number: int) -> bool:
+        """Vrai si le texte du chapitre a été enregistré après sa dernière préparation."""
+        segments = self.segments_dir / f"ch{number:02d}.jsonl"
+        text = self.text_path(number)
+        if not segments.exists() or not text.exists():
+            return False
+        return text.stat().st_mtime > segments.stat().st_mtime
+
+    def stale_chapters(self) -> list[int]:
+        """Les chapitres corrigés depuis leur préparation."""
+        return [
+            int(state["number"])
+            for state in self.chapter_states()
+            if self.text_changed(int(state["number"]))
+        ]
+
     def tracks(self) -> list[dict[str, object]]:
         """Chaque chapitre vu du côté de la synthèse : segments, piste, durée, alertes."""
         rows = []
@@ -331,10 +374,8 @@ class Project:
                     **state,
                     "segments": count,
                     "synthesized": track.exists(),
-                    # Une piste plus vieille que ses segments sera refaite à la prochaine synthèse.
-                    "current": track.exists()
-                    and segments.exists()
-                    and track.stat().st_mtime >= segments.stat().st_mtime,
+                    "current": self.track_matches(number),
+                    "text_changed": self.text_changed(number),
                     "seconds": timing[-1]["end"] if timing else 0.0,
                     "flagged": sum(1 for entry in timing if not entry.get("clean", True)),
                 }

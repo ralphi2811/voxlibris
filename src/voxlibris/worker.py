@@ -56,13 +56,26 @@ def run_normalize(project: Project, job: Job, queue: Queue) -> None:
 
 
 def track_is_current(track: Path, segments: Path) -> bool:
-    """Vrai si la piste existe et date d'après ses segments.
+    """Vrai si la piste dit exactement le texte des segments.
 
     Cas vécu : un passage corrigé dans le texte, les segments repréparés, et la synthèse
     qui répond « déjà synthétisé » en gardant la piste d'avant — la correction n'a jamais
-    atteint l'audio. La date des segments ne bouge que quand leur contenu change.
+    atteint l'audio. On compare donc le contenu, segment par segment, entre le manifeste
+    de la piste et les segments préparés ; les dates ne sont pas de la partie.
     """
-    return track.exists() and track.stat().st_mtime >= segments.stat().st_mtime
+    manifest = track.with_suffix(".timing.json")
+    if not (track.exists() and manifest.exists() and segments.exists()):
+        return False
+    try:
+        timing = json.loads(manifest.read_text(encoding="utf-8"))
+        records = [
+            json.loads(line) for line in segments.read_text(encoding="utf-8").splitlines() if line
+        ]
+    except ValueError:
+        return False
+    said = [(int(e.get("idx", 0)), str(e.get("text", ""))) for e in timing]
+    wanted = [(int(r.get("idx", 0)), str(r.get("text", ""))) for r in records]
+    return bool(said) and said == wanted
 
 
 def run_synth(project: Project, job: Job, queue: Queue) -> None:
@@ -79,6 +92,20 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     paths = sorted(project.segments_dir.glob("ch*.jsonl"))
     if not paths:
         raise RuntimeError("Aucun segment : lancer la normalisation d'abord.")
+
+    # Un texte corrigé depuis la préparation est redécoupé d'abord : sans cela, la
+    # synthèse repartirait des anciens segments et la correction n'atteindrait jamais
+    # l'audio. Seuls les chapitres dont les segments changent sont réécrits.
+    if stale := project.stale_chapters():
+        names = ", ".join(f"ch{n:02d}" for n in stale)
+        queue.report(job.id, 0.0, f"texte corrigé dans {names} : segments repréparés d'abord")
+        build_segments(
+            project.text_dir,
+            project.segments_dir,
+            announce_chapters=project.announce_chapters,
+            pause_scale=project.pause_scale,
+        )
+        paths = sorted(project.segments_dir.glob("ch*.jsonl"))
 
     # Le réglage précédent est relevé avant d'appliquer le nouveau : c'est leur écart qui
     # décide s'il faut tout refaire. La vitesse compte au même titre que la voix — un
@@ -129,7 +156,7 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
             # Même voix, même débit : ce qui n'a pas changé de texte est repris tel quel.
             number = int(path.stem.removeprefix("ch"))
             reuse = previous_takes(target, project.timing(number))
-            queue.report(job.id, message=f"{path.stem} : segments plus récents que la piste")
+            queue.report(job.id, message=f"{path.stem} : la piste ne dit plus le texte")
         segments = load_segments(path)
         queue.report(
             job.id,
@@ -258,6 +285,20 @@ def run_sample(project: Project, job: Job, queue: Queue) -> None:
     paths = sorted(project.segments_dir.glob("ch*.jsonl"))
     if not paths:
         raise RuntimeError("Aucun segment : lancer la normalisation d'abord.")
+
+    # Un texte corrigé depuis la préparation est redécoupé d'abord : sans cela, la
+    # synthèse repartirait des anciens segments et la correction n'atteindrait jamais
+    # l'audio. Seuls les chapitres dont les segments changent sont réécrits.
+    if stale := project.stale_chapters():
+        names = ", ".join(f"ch{n:02d}" for n in stale)
+        queue.report(job.id, 0.0, f"texte corrigé dans {names} : segments repréparés d'abord")
+        build_segments(
+            project.text_dir,
+            project.segments_dir,
+            announce_chapters=project.announce_chapters,
+            pause_scale=project.pause_scale,
+        )
+        paths = sorted(project.segments_dir.glob("ch*.jsonl"))
     segments = load_segments(paths[0])[:count]
 
     target_dir = project.out_dir / "samples"

@@ -151,8 +151,10 @@ coup d'œil où en est chaque livre et ce qui reste à faire.
   rendue avec ses polices —, les formes suspectes filtrées par cause, les propositions
   du modèle acceptées ou écartées une à une, rechercher-remplacer.
 - **Préparation** : silences, annonce des chapitres, et les segments tels qu'ils partent
-  au moteur. Un chapitre dont le texte n'a pas changé garde sa piste ; dans un chapitre
-  corrigé, seuls les segments dont le texte a changé repassent au moteur.
+  au moteur. Une piste est à jour quand elle dit exactement le texte de ses segments.
+  Un chapitre corrigé après coup est signalé, avec la marche à suivre : relancer la
+  synthèse — qui refait d'abord la préparation, puis ne repasse au moteur que les
+  segments dont le texte a changé —, et réassembler.
 - **Voix** : les moteurs avec leur licence et ce que l'atelier sait charger, un banc
   d'essai sur le même extrait, le coût du livre entier par moteur.
 - **Synthèse** : réglages, avancement segment par segment, bouton d'arrêt, et le tableau

@@ -169,7 +169,7 @@ class TestPistes:
         project = make_project(tmp_path / "p")
         project.segments_dir.mkdir(parents=True)
         (project.segments_dir / "ch01.jsonl").write_text(
-            '{"idx": 0}\n{"idx": 1}\n', encoding="utf-8"
+            '{"idx": 0, "text": "a"}\n{"idx": 1, "text": "b"}\n', encoding="utf-8"
         )
         project.wav_dir.mkdir(parents=True)
         (project.wav_dir / "ch01.wav").write_bytes(b"RIFF")
@@ -194,6 +194,19 @@ class TestPistes:
         assert rows[1]["segments"] == 2 and rows[1]["synthesized"] and rows[1]["current"]
         assert rows[1]["seconds"] == 3.0 and rows[1]["flagged"] == 1
         assert not rows[2]["synthesized"] and rows[2]["segments"] == 0
+        assert not rows[1]["text_changed"] and project.stale_chapters() == []
+
+        # Une piste est à jour par son contenu, pas par sa date.
+        (project.segments_dir / "ch01.jsonl").write_text(
+            '{"idx": 0, "text": "a"}\n{"idx": 1, "text": "b corrigé"}\n', encoding="utf-8"
+        )
+        assert not project.tracks()[0]["current"]
+        # Un texte enregistré après la préparation le dit.
+        import os
+
+        later = (project.segments_dir / "ch01.jsonl").stat().st_mtime + 60
+        os.utime(project.text_path(1), (later, later))
+        assert project.tracks()[0]["text_changed"] and project.stale_chapters() == [1]
 
         flagged = project.flagged_segments()
         assert [(f["chapter"], f["idx"], f["cause"]) for f in flagged] == [(1, 1, "trop court")]
@@ -358,3 +371,72 @@ class TestReprise:
         assert [e["reused"] for e in after] == [True, False, True]
         assert after[2]["start"] == pytest.approx(3.0, abs=0.05)
         assert "2 segments repris" in queue.get(job.id).log
+
+    def test_le_texte_corrige_est_reprepare_avant_la_synthese(self, tmp_path, monkeypatch):
+        """Corriger puis lancer la synthèse suffit : la préparation est refaite d'abord."""
+        import os
+
+        import soundfile as sf
+
+        from voxlibris import worker
+        from voxlibris.tts.quality import SAMPLE_RATE
+        from voxlibris.web.jobs import Queue
+
+        project = make_project(tmp_path / "p")
+        project.backend, project.voice = "faux", "voix"
+        project.save()
+        project.segments_dir.mkdir(parents=True)
+        segments = project.segments_dir / "ch01.jsonl"
+        segments.write_text(
+            json.dumps({"idx": 0, "text": "Un.", "pause_after_ms": 0, "chapter": 1, "title": "Un"})
+            + "\n",
+            encoding="utf-8",
+        )
+        project.wav_dir.mkdir(parents=True)
+        sf.write(project.wav_dir / "ch01.wav", np.full(SAMPLE_RATE, 0.1, np.float32), SAMPLE_RATE)
+        (project.wav_dir / "ch01.timing.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "idx": 0,
+                        "start": 0.0,
+                        "end": 1.0,
+                        "clean": True,
+                        "attempts": 1,
+                        "cause": "",
+                        "split": False,
+                        "text": "Un.",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        later = segments.stat().st_mtime + 60
+        os.utime(project.text_path(1), (later, later))
+
+        prepared = []
+        monkeypatch.setattr(
+            "voxlibris.worker.build_segments", lambda *a, **k: prepared.append(a) or {1: 1}
+        )
+
+        class FakeEngine:
+            name, voice, speed, sample_rate = "faux", "voix", 1.0, SAMPLE_RATE
+            supports_speed = True
+
+            def say(self, text):
+                return np.full(SAMPLE_RATE, 0.9, np.float32)
+
+        monkeypatch.setattr("voxlibris.tts.backends.load", lambda *a, **k: FakeEngine())
+        monkeypatch.setattr(
+            "voxlibris.tts.synth.profile_for_voice",
+            lambda *a, **k: __import__(
+                "voxlibris.tts.quality", fromlist=["QualityProfile"]
+            ).QualityProfile(chars_per_second=10),
+        )
+        queue = Queue(tmp_path / "jobs.sqlite")
+        job = queue.enqueue("p", "synth", backend="faux")
+        worker.run_synth(project, job, queue)
+        assert prepared and prepared[0][1] == project.segments_dir
+        assert "repréparés d'abord" in queue.get(job.id).log
+        # Les segments n'ayant pas changé, la piste est reconnue à jour.
+        assert "déjà synthétisé" in queue.get(job.id).log

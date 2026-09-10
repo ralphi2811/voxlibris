@@ -271,22 +271,45 @@ class TestVoxtralLocal:
 
 
 class TestPisteAJour:
-    def test_des_segments_plus_recents_forcent_la_synthese(self, tmp_path):
-        import os
+    def test_la_piste_est_a_jour_par_son_contenu(self, tmp_path):
+        import json
 
         from voxlibris.worker import track_is_current
 
         segments, track = tmp_path / "ch01.jsonl", tmp_path / "ch01.wav"
-        segments.write_text("{}\n")
+        segments.write_text('{"idx": 0, "text": "Un."}\n')
         assert not track_is_current(track, segments)
 
         track.write_bytes(b"RIFF")
+        track.with_suffix(".timing.json").write_text(json.dumps([{"idx": 0, "text": "Un."}]))
         assert track_is_current(track, segments)
 
-        # Le texte est corrigé et les segments repréparés après la piste.
-        plus_tard = track.stat().st_mtime + 60
-        os.utime(segments, (plus_tard, plus_tard))
+        # Le texte est corrigé et les segments repréparés : la piste ne le dit plus.
+        segments.write_text('{"idx": 0, "text": "Un et deux."}\n')
         assert not track_is_current(track, segments)
+
+    def test_la_page_de_synthese_donne_la_marche_a_suivre(self, client, make_epub):
+        import os
+
+        from voxlibris.web.app import project_dir
+
+        name = TestRelecture._create(None, client, make_epub)
+        root = project_dir(name)
+        (root / "work" / "segments").mkdir(parents=True)
+        segments = root / "work" / "segments" / "ch01.jsonl"
+        segments.write_text(
+            '{"idx": 0, "text": "Un.", "pause_after_ms": 0, "chapter": 1, "title": "Un"}\n'
+        )
+        assert (
+            "Texte corrigé depuis la préparation" not in client.get(f"/projects/{name}/synth").text
+        )
+
+        later = segments.stat().st_mtime + 60
+        text = root / "text" / "clean" / "ch01.md"
+        os.utime(text, (later, later))
+        page = client.get(f"/projects/{name}/synth").text
+        assert "Texte corrigé depuis la préparation — chapitre 01" in page
+        assert "texte corrigé" in page
 
 
 class TestFichiers:
