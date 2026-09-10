@@ -101,8 +101,7 @@ class UnknownVoice(RuntimeError):
     def __init__(self, backend: str, voice: str, available: list[str]) -> None:
         shown = ", ".join(available[:12]) + (" …" if len(available) > 12 else "")
         super().__init__(
-            f"Le moteur {backend!r} ne connaît pas la voix {voice!r}. "
-            f"Voix disponibles : {shown}"
+            f"Le moteur {backend!r} ne connaît pas la voix {voice!r}. Voix disponibles : {shown}"
         )
 
 
@@ -269,6 +268,9 @@ class VoxtralBackend(Backend):
         from .voxtral import Client, VoxtralError
 
         self._client = Client()
+        # Un serveur à soi peut ne pas être là : autant le savoir avant la calibration.
+        if self._client.is_local:
+            self._client.probe()
         # Le catalogue est celui du compte : voix fournies et voix clonées s'y mêlent, et
         # il ne peut donc pas être connu d'avance comme celui de Piper.
         self._voices = {v["name"]: v["id"] for v in self._client.voices() if v.get("name")}

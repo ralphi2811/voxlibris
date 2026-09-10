@@ -87,14 +87,10 @@ def make_pdf(tmp_path: Path):
                 page = doc.new_page(width=420, height=595)
                 if part == 0:
                     page.insert_text((72, 90), title, fontsize=20)
-                page.insert_textbox(
-                    pymupdf.Rect(72, 130, 348, 520), LOREM * 6, fontsize=11
-                )
+                page.insert_textbox(pymupdf.Rect(72, 130, 348, 520), LOREM * 6, fontsize=11)
 
         if outline:
-            doc.set_toc(
-                [[1, t, s + 1] for t, s in zip(titles, starts, strict=True)]
-            )
+            doc.set_toc([[1, t, s + 1] for t, s in zip(titles, starts, strict=True)])
 
         path = tmp_path / name
         doc.save(str(path))

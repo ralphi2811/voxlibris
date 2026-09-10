@@ -245,7 +245,5 @@ class TestTaches:
     def test_une_seule_tache_a_la_fois(self, client, make_epub):
         name = self._create(client, make_epub)
         client.post(f"/projects/{name}/jobs/normalize")
-        second = client.post(
-            f"/projects/{name}/jobs/normalize", follow_redirects=False
-        )
+        second = client.post(f"/projects/{name}/jobs/normalize", follow_redirects=False)
         assert second.status_code == 409

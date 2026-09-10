@@ -45,7 +45,7 @@ MAX_WORDS = 2
 
 # La ponctuation a été calibrée pour la synthèse (points de suspension convertis en
 # silence, deux-points conservés). Le modèle n'a pas à y toucher.
-FORBIDDEN = set(".!?;:,«»\"()[]{}…")
+FORBIDDEN = set('.!?;:,«»"()[]{}…')
 
 # Une forme qui revient est rarement une coquille : c'est un nom propre, un néologisme,
 # ou le parler d'un personnage. Les soumettre au modèle, c'est l'inviter à normaliser ce
@@ -147,9 +147,7 @@ def distance(a: str, b: str) -> int:
     for i, ca in enumerate(a, 1):
         current = [i]
         for j, cb in enumerate(b, 1):
-            current.append(
-                min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (ca != cb))
-            )
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (ca != cb)))
         previous = current
     return previous[-1]
 
@@ -224,7 +222,7 @@ def _ask(llm: LLM, batch: Sequence[tuple[Suspect, str]]) -> dict[int, object]:
         "Voici des formes relevées dans un texte océrisé. La forme concernée est encadrée "
         "par ⟦ ⟧ dans son contexte.\n\n"
         + json.dumps(entries, ensure_ascii=False, indent=1)
-        + '\n\nRéponds par un tableau JSON de la même longueur, chaque élément de la forme '
+        + "\n\nRéponds par un tableau JSON de la même longueur, chaque élément de la forme "
         '{"id": <entier>, "correction": "<mot>"} ou {"id": <entier>, "correction": null}.'
     )
     answer = llm.ask_json(prompt, system=SYSTEM)
@@ -290,9 +288,7 @@ def suggest(
         for index, (suspect, context) in enumerate(batch):
             replacement, cause = check(suspect.word, replies.get(index), spell, allowed)
             if cause:
-                report.rejected.append(
-                    Rejected(suspect.word, str(replies.get(index)), cause)
-                )
+                report.rejected.append(Rejected(suspect.word, str(replies.get(index)), cause))
             elif replacement:
                 report.suggestions.append(
                     Suggestion(

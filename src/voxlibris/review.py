@@ -128,9 +128,7 @@ def main() -> None:
     parser.add_argument("--vocabulary", type=Path, help="fichier de mots propres à l'ouvrage")
     args = parser.parse_args()
 
-    words = (
-        args.vocabulary.read_text(encoding="utf-8").split() if args.vocabulary else []
-    )
+    words = args.vocabulary.read_text(encoding="utf-8").split() if args.vocabulary else []
     suspects = inspect_directory(args.directory, language=args.language, vocabulary=words)
 
     current = ""

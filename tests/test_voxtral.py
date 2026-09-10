@@ -221,3 +221,34 @@ class TestLocal:
         assert "fr_female" in noms and "fr_male" in noms
         assert not client.calls
         assert voxtral.voice_names("fr", client=client) == ["fr_female", "fr_male"]
+
+
+class TestInjoignable:
+    """Le message quand rien ne répond doit désigner la cause, pas la pile d'appels."""
+
+    def test_localhost_depuis_un_conteneur(self, monkeypatch):
+        monkeypatch.setattr(voxtral, "in_container", lambda: True)
+        assert "host.docker.internal" in voxtral.unreachable_hint("http://localhost:8600/v1")
+        assert "voxtral:8600" in voxtral.unreachable_hint("http://127.0.0.1:8600/v1")
+
+    def test_rien_a_dire_hors_conteneur(self, monkeypatch):
+        monkeypatch.setattr(voxtral, "in_container", lambda: False)
+        assert voxtral.unreachable_hint("http://localhost:8600/v1") == ""
+
+    def test_rien_a_dire_pour_une_bonne_adresse(self, monkeypatch):
+        monkeypatch.setattr(voxtral, "in_container", lambda: True)
+        assert voxtral.unreachable_hint("http://host.docker.internal:8600/v1") == ""
+        assert voxtral.unreachable_hint("http://voxtral:8600/v1") == ""
+
+    def test_connexion_refusee_porte_le_conseil(self, monkeypatch):
+        monkeypatch.setattr(voxtral, "in_container", lambda: True)
+        # Port fermé : la connexion est refusée immédiatement, sans réseau.
+        client = voxtral.Client(url="http://127.0.0.1:9", timeout=1)
+        with pytest.raises(voxtral.VoxtralError, match="injoignable.*localhost"):
+            client.probe()
+
+    def test_la_sonde_interroge_les_modeles(self):
+        client = FakeClient({"/models": (b'{"data": []}', "application/json")})
+        client.url = "http://localhost:8600/v1"
+        client.probe()
+        assert client.calls == [("/models", None)]

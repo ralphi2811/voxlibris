@@ -76,9 +76,7 @@ def review(
 
     project = _open(root)
     words = vocabulary.read_text(encoding="utf-8").split() if vocabulary else []
-    suspects = inspect_directory(
-        project.text_dir, language=project.language, vocabulary=words
-    )
+    suspects = inspect_directory(project.text_dir, language=project.language, vocabulary=words)
 
     current = ""
     for suspect in suspects:
@@ -245,13 +243,10 @@ def normalize(
     if pauses is not None:
         project.pause_scale = pauses
         project.save()
-    counts = build_segments(
-        project.text_dir, project.segments_dir, pause_scale=project.pause_scale
-    )
+    counts = build_segments(project.text_dir, project.segments_dir, pause_scale=project.pause_scale)
     total = sum(counts.values())
     console.print(
-        f"{total} segments écrits dans {project.segments_dir} "
-        f"(silences à {project.pause_scale:g}×)"
+        f"{total} segments écrits dans {project.segments_dir} (silences à {project.pause_scale:g}×)"
     )
 
 
@@ -309,9 +304,7 @@ def synth(
     project.backend, project.voice = backend, chosen
     project.save()
 
-    profile = profile_for_voice(
-        engine, load_segments(paths[0]), project.calibration_file
-    )
+    profile = profile_for_voice(engine, load_segments(paths[0]), project.calibration_file)
     console.print(
         f"Moteur [bold]{backend}[/bold], voix [bold]{chosen}[/bold], "
         f"vitesse {project.speed:g}×, débit calibré à {profile.chars_per_second} car/s.\n"

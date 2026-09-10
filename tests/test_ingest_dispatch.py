@@ -130,12 +130,26 @@ class TestGutenberg:
             title="Essai",
             author="A.",
             chapters=[
-                Chapter(1, "Notice", ["Title: Essai", "This eBook is for the use of anyone.",
-                                      "*** START OF THE PROJECT GUTENBERG EBOOK ESSAI ***",
-                                      "Il était une fois."]),
-                Chapter(2, "Suite", ["La suite du récit.", "Fin.",
-                                     "*** END OF THE PROJECT GUTENBERG EBOOK ESSAI ***",
-                                     "Section 1. General Terms of Use"]),
+                Chapter(
+                    1,
+                    "Notice",
+                    [
+                        "Title: Essai",
+                        "This eBook is for the use of anyone.",
+                        "*** START OF THE PROJECT GUTENBERG EBOOK ESSAI ***",
+                        "Il était une fois.",
+                    ],
+                ),
+                Chapter(
+                    2,
+                    "Suite",
+                    [
+                        "La suite du récit.",
+                        "Fin.",
+                        "*** END OF THE PROJECT GUTENBERG EBOOK ESSAI ***",
+                        "Section 1. General Terms of Use",
+                    ],
+                ),
                 Chapter(3, "Licence", ["Blabla juridique."]),
             ],
         )

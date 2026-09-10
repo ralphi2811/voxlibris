@@ -254,9 +254,7 @@ class Project:
                     title = line.partition(":")[2].strip().strip('"')
             body = (self.clean_dir if reviewed else self.raw_dir) / path.name
             words = len(body.read_text(encoding="utf-8").split("---", 2)[-1].split())
-            states.append(
-                {"number": number, "title": title, "reviewed": reviewed, "words": words}
-            )
+            states.append({"number": number, "title": title, "reviewed": reviewed, "words": words})
         return states
 
     @property
@@ -277,9 +275,7 @@ class Project:
         return {
             "chapitres": len(list(self.raw_dir.glob("ch*.md"))),
             "relu": self.clean_dir.exists() and any(self.clean_dir.glob("ch*.md")),
-            "segments": sum(
-                1 for path in self.segments_dir.glob("ch*.jsonl") for _ in path.open()
-            ),
+            "segments": sum(1 for path in self.segments_dir.glob("ch*.jsonl") for _ in path.open()),
             "chapitres synthétisés": len(wavs),
             "m4b": next(iter(self.out_dir.glob("*.m4b")), None),
         }

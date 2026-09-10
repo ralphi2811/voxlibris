@@ -39,9 +39,7 @@ def run_normalize(project: Project, job: Job, queue: Queue) -> None:
     if (scale := job.params.get("pause_scale")) is not None:
         project.pause_scale = float(scale)
         project.save()
-    counts = build_segments(
-        project.text_dir, project.segments_dir, pause_scale=project.pause_scale
-    )
+    counts = build_segments(project.text_dir, project.segments_dir, pause_scale=project.pause_scale)
     queue.report(
         job.id,
         1.0,
@@ -165,9 +163,7 @@ def moderation_warnings(backend: str, paths: list[Path], show: int = 5) -> list[
     if Client().is_local:
         return []
 
-    segments = [
-        json.loads(line) for path in paths for line in path.open(encoding="utf-8")
-    ]
+    segments = [json.loads(line) for path in paths for line in path.open(encoding="utf-8")]
     try:
         verdicts = Client().moderate([s["text"] for s in segments])
     except VoxtralError as error:
@@ -281,9 +277,7 @@ def execute(job: Job, queue: Queue, root: Path) -> None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s  %(levelname)-7s %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-7s %(message)s")
     signal.signal(signal.SIGTERM, _request_stop)
     signal.signal(signal.SIGINT, _request_stop)
 

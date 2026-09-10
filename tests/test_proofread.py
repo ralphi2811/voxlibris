@@ -29,8 +29,7 @@ class FakeLLM(LLM):
         self.prompts.append(prompt)
         entries = json.loads(prompt[prompt.index("[") : prompt.rindex("]") + 1])
         return [
-            {"id": entry["id"], "correction": self.answers.get(entry["forme"])}
-            for entry in entries
+            {"id": entry["id"], "correction": self.answers.get(entry["forme"])} for entry in entries
         ]
 
 
@@ -123,9 +122,13 @@ def test_une_panne_du_modele_nempeche_pas_de_relire(monkeypatch):
     """Sans modèle, la relecture manuelle reste possible : le rapport dit pourquoi."""
     texte = "Le navire connaîftront la tempête au large de Maurice."
     llm = FakeLLM({})
-    monkeypatch.setattr(llm, "ask_json", lambda *a, **k: (_ for _ in ()).throw(
-        __import__("voxlibris.llm", fromlist=["LLMError"]).LLMError("injoignable")
-    ))
+    monkeypatch.setattr(
+        llm,
+        "ask_json",
+        lambda *a, **k: (_ for _ in ()).throw(
+            __import__("voxlibris.llm", fromlist=["LLMError"]).LLMError("injoignable")
+        ),
+    )
     report = suggest({"ch01.md": texte}, llm=llm)
     assert not report.suggestions
     assert "injoignable" in report.error

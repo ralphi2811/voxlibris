@@ -221,9 +221,7 @@ def review_chapter(request: Request, name: str, number: int):
 
     chapter = Chapter.from_markdown(path.read_text(encoding="utf-8"))
     suspects = inspect_texts({path.name: chapter.text}, language=project.language)
-    numbers = sorted(
-        int(p.stem.removeprefix("ch")) for p in project.text_dir.glob("ch*.md")
-    )
+    numbers = sorted(int(p.stem.removeprefix("ch")) for p in project.text_dir.glob("ch*.md"))
     return render(
         request,
         "review.html",
@@ -248,9 +246,7 @@ def save_chapter(name: str, number: int, text: str = Form(...), title: str = For
     chapter.paragraphs = [p.strip() for p in text.replace("\r\n", "\n").split("\n\n") if p.strip()]
 
     project.clean_dir.mkdir(parents=True, exist_ok=True)
-    (project.clean_dir / f"ch{number:02d}.md").write_text(
-        chapter.to_markdown(), encoding="utf-8"
-    )
+    (project.clean_dir / f"ch{number:02d}.md").write_text(chapter.to_markdown(), encoding="utf-8")
     return RedirectResponse(f"/projects/{name}/review/{number}", status_code=303)
 
 
@@ -315,7 +311,6 @@ def _number(raw: object, low: float, high: float) -> float | None:
         return None
 
 
-
 @app.post("/projects/{name}/jobs/{kind}")
 async def enqueue_job(request: Request, name: str, kind: str):
     load_project(name)
@@ -337,8 +332,7 @@ async def enqueue_job(request: Request, name: str, kind: str):
         picks = [str(v) for v in form.getlist("voice")]
         params = {
             "voices": [
-                {"backend": b, "voice": v}
-                for b, _, v in (pick.partition("/") for pick in picks)
+                {"backend": b, "voice": v} for b, _, v in (pick.partition("/") for pick in picks)
             ]
         }
     elif kind == "assemble":

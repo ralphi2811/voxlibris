@@ -74,6 +74,7 @@ def _chapter_number(text: str) -> int | None:
 
 def normalize_header(raw: str) -> str:
     """Réduit un en-tête à sa partie signifiante, ornements typographiques ôtés."""
+
     def significant(word: str) -> bool:
         if word.isdigit():
             return True
@@ -308,9 +309,7 @@ def ingest(
 
     chapter_titles = assign_chapters(pages)
     back_matter = trim_back_matter(pages, chapter_titles)
-    dropped_report = [
-        f"p.{page.number:>3} {line}" for page in pages for line in page.dropped
-    ]
+    dropped_report = [f"p.{page.number:>3} {line}" for page in pages for line in page.dropped]
 
     if not chapter_titles:
         # Aucun en-tête exploitable : tout le corps forme un chapitre unique, à

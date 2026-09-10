@@ -28,8 +28,10 @@ import io
 import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import wave
+from pathlib import Path
 
 import numpy as np
 
@@ -149,6 +151,7 @@ def decode_wav(raw: bytes) -> tuple[np.ndarray, int]:
 
 def _violated(body: str) -> list[str]:
     """Extrait les catégories enfreintes d'un refus, quelle que soit sa profondeur."""
+
     def dig(node) -> list[str]:
         if isinstance(node, dict):
             if "violated" in node:
@@ -168,6 +171,29 @@ def _violated(body: str) -> list[str]:
         return sorted(set(dig(json.loads(body))))
     except json.JSONDecodeError:
         return []
+
+
+def in_container() -> bool:
+    """Vrai sous Docker. Le fichier est posé par le moteur, quel que soit l'image."""
+    return Path("/.dockerenv").exists()
+
+
+def unreachable_hint(url: str) -> str:
+    """Ce qu'il faut savoir quand « localhost » ne répond pas depuis un conteneur.
+
+    Cas vécu : le .env de l'hôte disait localhost:8600, le serveur y tournait, et
+    l'ouvrier sous Compose s'est vu refuser la connexion — pour lui, localhost, c'est
+    lui-même. Une trace de quarante lignes ne le dit pas ; cette phrase, si.
+    """
+    host = urllib.parse.urlsplit(url).hostname or ""
+    if in_container() and host in {"localhost", "127.0.0.1", "::1"}:
+        return (
+            " — dans un conteneur, « localhost » désigne le conteneur lui-même. Pour un "
+            "serveur qui tourne sur la machine, VOXLIBRIS_MISTRAL_BASE_URL="
+            "http://host.docker.internal:8600/v1 ; pour le service Compose, "
+            "http://voxtral:8600/v1 avec « --profile voxtral »."
+        )
+    return ""
 
 
 class Client:
@@ -218,7 +244,17 @@ class Client:
                 raise Refused(_violated(body)) from error
             raise VoxtralError(f"{path} a répondu {error.code} : {body[:300]}") from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
-            raise VoxtralError(f"{self.url}{path} injoignable : {error}") from error
+            raise VoxtralError(
+                f"{self.url}{path} injoignable : {error}{unreachable_hint(self.url)}"
+            ) from error
+
+    def probe(self) -> None:
+        """Vérifie que le serveur répond, avant de lui confier quoi que ce soit.
+
+        Une adresse fausse se découvre sinon au premier segment de la calibration, au
+        fond d'une pile d'appels. Ici elle se découvre en une ligne, tout de suite.
+        """
+        self._request("/models")
 
     def voices(self) -> list[dict]:
         """Toutes les voix du compte, pagination comprise.

@@ -48,9 +48,19 @@ def run(*cmd: str | Path) -> None:
 
 def probe_duration(path: Path) -> float:
     out = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-        check=True, capture_output=True, text=True,
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
     return float(out.stdout.strip())
 
@@ -93,9 +103,17 @@ def extract_cover(source: Path | None, target: Path) -> Path | None:
 def normalized_wav(source: Path, target: Path) -> None:
     """Applique la normalisation de niveau EBU R128."""
     run(
-        "ffmpeg", "-y", "-i", source,
-        "-af", f"loudnorm=I={LOUDNESS_LUFS}:TP={LOUDNESS_PEAK}:LRA=7",
-        "-ar", "24000", "-ac", "1", target,
+        "ffmpeg",
+        "-y",
+        "-i",
+        source,
+        "-af",
+        f"loudnorm=I={LOUDNESS_LUFS}:TP={LOUDNESS_PEAK}:LRA=7",
+        "-ar",
+        "24000",
+        "-ac",
+        "1",
+        target,
     )
 
 
@@ -112,13 +130,26 @@ def write_mp3(
     if cover:
         cmd += ["-i", cover, "-map", "0:a", "-map", "1:v", "-disposition:v", "attached_pic"]
     cmd += [
-        "-codec:a", "libmp3lame", "-qscale:a", "6", "-ar", "24000", "-ac", "1",
-        "-metadata", f"title={title}",
-        "-metadata", f"artist={meta.author}",
-        "-metadata", f"album={meta.title}",
-        "-metadata", f"track={chapter}/{total}",
-        "-metadata", "genre=Livre audio",
-        "-metadata", f"comment={meta.comment}",
+        "-codec:a",
+        "libmp3lame",
+        "-qscale:a",
+        "6",
+        "-ar",
+        "24000",
+        "-ac",
+        "1",
+        "-metadata",
+        f"title={title}",
+        "-metadata",
+        f"artist={meta.author}",
+        "-metadata",
+        f"album={meta.title}",
+        "-metadata",
+        f"track={chapter}/{total}",
+        "-metadata",
+        "genre=Livre audio",
+        "-metadata",
+        f"comment={meta.comment}",
     ]
     if meta.year:
         cmd += ["-metadata", f"date={meta.year}"]
@@ -136,9 +167,7 @@ def write_m4b(
 ) -> None:
     """Concatène les chapitres et y attache les marqueurs de chapitres."""
     concat_list = work / "concat.txt"
-    concat_list.write_text(
-        "".join(f"file '{w.resolve()}'\n" for w in wavs), encoding="utf-8"
-    )
+    concat_list.write_text("".join(f"file '{w.resolve()}'\n" for w in wavs), encoding="utf-8")
 
     # Les timestamps doivent venir des durées réelles : une estimation décalerait
     # progressivement tous les marqueurs suivants.
@@ -154,8 +183,10 @@ def write_m4b(
         chapter = int(wav.stem.removeprefix("ch"))
         end_ms = start_ms + int(probe_duration(wav) * 1000)
         lines += [
-            "[CHAPTER]", "TIMEBASE=1/1000",
-            f"START={start_ms}", f"END={end_ms}",
+            "[CHAPTER]",
+            "TIMEBASE=1/1000",
+            f"START={start_ms}",
+            f"END={end_ms}",
             f"title={titles.get(chapter, wav.stem)}",
         ]
         start_ms = end_ms
@@ -163,17 +194,39 @@ def write_m4b(
     metadata.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     cmd: list[str | Path] = [
-        "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0", "-i", concat_list,
-        "-i", metadata,
+        "ffmpeg",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        concat_list,
+        "-i",
+        metadata,
     ]
     maps = ["-map", "0:a"]
     if cover:
         cmd += ["-i", cover]
         maps += ["-map", "2:v", "-disposition:v", "attached_pic", "-c:v", "mjpeg"]
-    cmd += ["-map_metadata", "1", *maps,
-            "-codec:a", "aac", "-b:a", "64k", "-ar", "24000", "-ac", "1",
-            "-movflags", "+faststart", "-f", "mp4", target]
+    cmd += [
+        "-map_metadata",
+        "1",
+        *maps,
+        "-codec:a",
+        "aac",
+        "-b:a",
+        "64k",
+        "-ar",
+        "24000",
+        "-ac",
+        "1",
+        "-movflags",
+        "+faststart",
+        "-f",
+        "mp4",
+        target,
+    ]
     run(*cmd)
 
 
@@ -252,8 +305,10 @@ def main() -> None:
         on_progress=print,
     )
     total = probe_duration(m4b)
-    print(f"\n{m4b}  —  {int(total // 3600)} h {int(total % 3600 // 60):02d} min, "
-          f"{m4b.stat().st_size / 1e6:.1f} Mo")
+    print(
+        f"\n{m4b}  —  {int(total // 3600)} h {int(total % 3600 // 60):02d} min, "
+        f"{m4b.stat().st_size / 1e6:.1f} Mo"
+    )
 
 
 if __name__ == "__main__":

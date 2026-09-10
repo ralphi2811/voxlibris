@@ -136,9 +136,7 @@ def strip_gutenberg(document: Document) -> int:
     suivants reculent d'un rang.
     """
     removed = 0
-    started = not any(
-        GUTENBERG_START.search(p) for c in document.chapters for p in c.paragraphs
-    )
+    started = not any(GUTENBERG_START.search(p) for c in document.chapters for p in c.paragraphs)
     kept: list[Chapter] = []
     for chapter in document.chapters:
         body: list[str] = []
