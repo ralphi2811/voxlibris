@@ -247,3 +247,15 @@ class TestTaches:
         client.post(f"/projects/{name}/jobs/normalize")
         second = client.post(f"/projects/{name}/jobs/normalize", follow_redirects=False)
         assert second.status_code == 409
+
+
+class TestVoxtralLocal:
+    """Servi chez soi, Voxtral n'a ni facture ni envoi : l'interface ne doit pas les annoncer."""
+
+    def test_avertissement_seulement_pour_l_api(self, monkeypatch):
+        from voxlibris.web import app as app_module
+
+        monkeypatch.setenv("VOXLIBRIS_MISTRAL_BASE_URL", "http://voxtral:8600/v1")
+        assert app_module.voxtral_is_local()
+        monkeypatch.setenv("VOXLIBRIS_MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
+        assert not app_module.voxtral_is_local()

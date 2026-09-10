@@ -97,7 +97,7 @@
       </label>
       {% endfor %}
       <button type="submit" {% if job or not status["segments"] %}disabled{% endif %}>Comparer</button>
-      {% if catalogues["voxtral"] %}
+      {% if catalogues["voxtral"] and not voxtral_local %}
       <p class="hint">
         Voxtral est facturé à l'usage — quelques centimes pour un extrait, mais il envoie
         le texte chez Mistral.

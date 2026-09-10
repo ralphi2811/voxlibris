@@ -97,6 +97,13 @@ def catalogues(language: str = "") -> dict[str, list[str]]:
     return known
 
 
+def voxtral_is_local() -> bool:
+    """Vrai si Voxtral est servi chez soi : ni facture ni envoi du texte à annoncer."""
+    from ..tts.voxtral import DEFAULT_BASE_URL, base_url
+
+    return "api.mistral.ai" not in (base_url() or DEFAULT_BASE_URL)
+
+
 # Voix XTTS proposées d'emblée au banc d'essai. Elles ne peuvent pas être listées sans
 # charger le modèle, et ce sont de toute façon celles qui tiennent le français.
 XTTS_SUGGESTIONS = ("Viktor Menelaos", "Damien Black", "Tammie Ema")
@@ -167,6 +174,7 @@ def show_project(request: Request, name: str):
         jobs=queue.list(name, limit=8),
         backends=sorted(BACKENDS),
         catalogues=catalogues(project.language),
+        voxtral_local=voxtral_is_local(),
         candidates=sample_candidates(project.language),
         suggestions=len(load_suggestions(project)),
         samples=sorted((project.out_dir / "samples").glob("*.wav")),

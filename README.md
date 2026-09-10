@@ -166,7 +166,19 @@ docker compose --profile voxtral -f docker-compose.yml -f docker-compose.gpu.yml
 
 puis `VOXLIBRIS_MISTRAL_BASE_URL=http://voxtral:8600/v1` dans le `.env`. Pour joindre
 un Ollama installé sur la machine depuis les conteneurs, l'adresse est
-`http://host.docker.internal:11434/v1`.
+`http://host.docker.internal:11434/v1` — de même, `…:8600/v1` pour un vLLM lancé à la
+main sur l'hôte.
+
+**Un pare-feu sur l'hôte bloque ces adresses** : `ufw`, en particulier, rejette ce qui
+arrive des ponts Docker, et le conteneur voit un « timed out » plutôt qu'un refus. Il
+faut ouvrir le port aux réseaux Docker, et à eux seuls :
+
+```bash
+sudo ufw allow from 172.16.0.0/12 to any port 8600 proto tcp comment 'voxlibris : vLLM depuis Docker'
+```
+
+Le service `voxtral` sous profil ne pose pas ce problème : les conteneurs se parlent
+entre eux sans passer par le pare-feu de l'hôte.
 
 Les poids des modèles vont dans un volume nommé, `models`, et survivent aux
 reconstructions d'images. Les conteneurs tournent sous votre UID : rien de ce qu'ils
