@@ -234,6 +234,7 @@ mark { background: var(--warn-soft); color: var(--warn); padding: 0 2px; border-
 
 /* --- Lecteur de pistes ------------------------------------------------------------------ */
 .player-bar { position: sticky; bottom: 16px; display: flex; align-items: center; gap: 12px; margin-top: 20px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--line2); border-radius: var(--r-lg); box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.player-bar[hidden] { display: none; }
 .player-bar .label { flex: 1; min-width: 0; font-size: 13px; color: var(--ink2); }
 .player-bar audio { height: 32px; max-width: 420px; }
 .listen.playing { background: var(--accent-soft); color: var(--accent); }
