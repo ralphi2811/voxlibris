@@ -146,8 +146,8 @@ coup d'œil où en est chaque livre et ce qui reste à faire.
 - **Bibliothèque** : dépôt par glisser-déposer, état de chaque livre, téléchargement.
 - **Chapitres** : titres corrigés en place — ils sont annoncés à voix haute —, chapitres
   retirés ou recollés, métadonnées et couverture du livre audio.
-- **Relecture** : le texte face à la page numérisée, les formes suspectes filtrées par
-  cause, les propositions du modèle acceptées ou écartées une à une, rechercher-remplacer.
+- **Relecture** : le texte face à la page d'origine — image du PDF, ou page de l'EPUB
+  rendue avec ses polices —, les formes suspectes filtrées par cause, les propositions du modèle acceptées ou écartées une à une, rechercher-remplacer.
 - **Préparation** : silences, annonce des chapitres, et les segments tels qu'ils partent
   au moteur. Un chapitre dont le texte n'a pas changé garde sa piste.
 - **Voix** : les moteurs avec leur licence et ce que l'atelier sait charger, un banc

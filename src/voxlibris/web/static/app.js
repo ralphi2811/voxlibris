@@ -229,7 +229,7 @@
       if (n && window.confirm("Remplacer " + n + " occurrence(s) de « " + q + " » ?")) area.value = area.value.split(q).join(replace.value);
     });
 
-    // Feuilleter les pages du scan.
+    // Feuilleter les pages d'origine : une image pour un PDF, un cadre pour un EPUB paginé.
     var image = document.getElementById("page-image");
     if (image) {
       var offset = 0, total = Number(image.dataset.total), first = Number(image.dataset.first);
@@ -237,10 +237,37 @@
       var show = function () { image.src = image.dataset.url + "?page=" + offset; if (label) label.textContent = first + offset; };
       document.getElementById("page-prev").onclick = function () { offset = Math.max(0, offset - 1); show(); };
       document.getElementById("page-next").onclick = function () { offset = Math.min(total - 1, offset + 1); show(); };
+      if (image.tagName === "IFRAME") fitPage(image);
     }
 
     var jump = document.getElementById("chapter-jump");
     if (jump) jump.addEventListener("change", function () { window.location = jump.value; });
+  }
+
+  // Une page d'EPUB paginé est servie à sa taille réelle, sans script : c'est ici qu'on
+  // la réduit à la largeur du volet, en gardant ses proportions.
+  function fitPage(frame) {
+    var box = frame.parentNode;
+    var fit = function () {
+      var w = Number(frame.dataset.width), h = Number(frame.dataset.height);
+      if (!w || !h) return;
+      box.style.aspectRatio = w + " / " + h;
+      frame.style.width = w + "px"; frame.style.height = h + "px";
+      frame.style.transform = "scale(" + box.clientWidth / w + ")";
+    };
+    frame.addEventListener("load", function () {
+      // Sans dimensions connues d'avance, on les lit dans la page chargée.
+      if (!frame.dataset.width) {
+        try {
+          var meta = frame.contentDocument.querySelector('meta[name="viewport"]');
+          var m = /width=(\d+).*height=(\d+)/.exec(meta ? meta.content : "");
+          if (m) { frame.dataset.width = m[1]; frame.dataset.height = m[2]; }
+        } catch (e) { /* cadre inaccessible : on reste aux proportions par défaut */ }
+      }
+      fit();
+    });
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(box); else window.addEventListener("resize", fit);
+    fit();
   }
 
   // --- Réglages : sonder un service ---------------------------------------------------------

@@ -39,9 +39,19 @@
       <button class="btn sm ghost" type="button" id="page-prev">{{ icons.ic("back", 14) }}</button>
       <button class="btn sm ghost" type="button" id="page-next">{{ icons.ic("chev", 14) }}</button>
     </div>
+    {% if page_kind == "epub" %}
+    <div class="page-frame" {% if page_size %}style="aspect-ratio: {{ page_size[0] }} / {{ page_size[1] }}"{% endif %}>
+      <iframe id="page-image" src="/projects/{{ name }}/page/{{ chapter.number }}?page=0" title="page d'origine"
+              sandbox="allow-same-origin" referrerpolicy="no-referrer"
+              {% if page_size %}data-width="{{ page_size[0] }}" data-height="{{ page_size[1] }}"{% endif %}
+              data-first="{{ chapter.source_pages[0] }}" data-total="{{ chapter.source_pages[1] - chapter.source_pages[0] + 1 }}"
+              data-url="/projects/{{ name }}/page/{{ chapter.number }}"></iframe>
+    </div>
+    {% else %}
     <img id="page-image" src="/projects/{{ name }}/page/{{ chapter.number }}?page=0" alt="page numérisée"
          data-first="{{ chapter.source_pages[0] }}" data-total="{{ chapter.source_pages[1] - chapter.source_pages[0] + 1 }}"
          data-url="/projects/{{ name }}/page/{{ chapter.number }}">
+    {% endif %}
   </aside>
   {% endif %}
 

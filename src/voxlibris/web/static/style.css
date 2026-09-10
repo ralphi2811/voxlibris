@@ -189,6 +189,8 @@ tbody tr:hover td { background: rgba(255, 255, 255, .015); }
 .editor p { margin: 0; display: flex; gap: 8px; align-items: center; }
 .page-pane { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 84px; }
 .page-pane img { width: 100%; border-radius: 6px; border: 1px solid var(--line2); background: #e9e2d2; }
+.page-frame { position: relative; overflow: hidden; width: 100%; aspect-ratio: 2 / 3; border-radius: 6px; border: 1px solid var(--line2); background: #fff; }
+.page-frame iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; }
 .proposals { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); display: flex; flex-direction: column; position: sticky; top: 84px; max-height: calc(100vh - 100px); }
 .proposals .card-head { padding: 12px 14px; }
 .filter-bar { padding: 10px 14px; border-bottom: 1px solid var(--line); }

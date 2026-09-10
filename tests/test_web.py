@@ -278,3 +278,47 @@ class TestPisteAJour:
         plus_tard = track.stat().st_mtime + 60
         os.utime(segments, (plus_tard, plus_tard))
         assert not track_is_current(track, segments)
+
+
+class TestPagesDOrigine:
+    """Un EPUB paginé montre ses pages en regard du texte, dans un cadre isolé."""
+
+    @pytest.fixture
+    def name(self, client, tmp_path):
+        from test_ingest_epub_fixe import page, write_epub
+
+        first = page([("x0", 600, "h0", "<span>Première page du registre, assez longue.</span>")])
+        second = page([("x0", 600, "h0", "<span>Seconde page du registre, assez longue.</span>")])
+        path = write_epub(
+            tmp_path / "registre.epub",
+            [first, second],
+            [(1, "1. Le début")],
+            {"fonts/a.ttf": b"\x00\x01\x00\x00police", "pdf2fl.js": b"alert(1)"},
+        )
+        with path.open("rb") as handle:
+            client.post("/projects", files={"file": (path.name, handle)})
+        return "le-registre"
+
+    def test_la_relecture_ouvre_un_cadre(self, client, name):
+        response = client.get(f"/projects/{name}/review/1")
+        assert response.status_code == 200
+        assert '<iframe id="page-image"' in response.text
+        assert 'sandbox="allow-same-origin"' in response.text
+        assert 'data-width="1000"' in response.text
+
+    def test_la_page_et_ses_ressources(self, client, name):
+        response = client.get(f"/projects/{name}/page/1?page=1")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        assert f'<base href="/projects/{name}/source/OPS/">' in response.text
+        assert "<script" not in response.text
+        assert "script" not in response.headers["content-security-policy"].replace("'none'", "")
+        assert "default-src 'none'" in response.headers["content-security-policy"]
+        assert client.get(f"/projects/{name}/source/OPS/fonts/a.ttf").status_code == 200
+        assert client.get(f"/projects/{name}/source/OPS/pdf2fl.js").status_code == 404
+        assert client.get(f"/projects/{name}/source/OPS/content.opf").status_code == 404
+
+    def test_hors_des_bornes_on_reste_dans_le_chapitre(self, client, name):
+        response = client.get(f"/projects/{name}/page/1?page=99")
+        assert response.status_code == 200
+        assert "Seconde page" in response.text

@@ -20,11 +20,11 @@ import unicodedata
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .. import atelier
+from .. import atelier, pages
 from ..config import EDITABLE, SECRETS, origin, setting, write_settings
 from ..document import Chapter
 from ..ingest import ingest as ingest_book
@@ -514,6 +514,17 @@ def load_suggestions(project: Project) -> list:
         return []
 
 
+def page_size(project: Project, chapter: Chapter) -> tuple[int, int] | None:
+    """Proportions de la première page du chapitre, pour dimensionner le cadre."""
+    if pages.kind(project) != "epub" or not chapter.source_pages:
+        return None
+    try:
+        book = pages.Pages(project.source)
+        return pages.size(book.raw(chapter.source_pages[0] - 1))
+    except (OSError, IndexError, KeyError):
+        return None
+
+
 @app.get("/projects/{name}/review/{number}", response_class=HTMLResponse)
 def review_chapter(request: Request, name: str, number: int, find: str = ""):
     """Éditeur de relecture : le texte à corriger, la page d'origine en regard."""
@@ -543,6 +554,8 @@ def review_chapter(request: Request, name: str, number: int, find: str = ""):
         previous=max([n for n in numbers if n < number], default=None),
         following=min([n for n in numbers if n > number], default=None),
         find=find,
+        page_kind=pages.kind(project),
+        page_size=page_size(project, chapter),
         llm_enabled=setting("VOXLIBRIS_LLM_ENABLED", "1") != "0",
         llm_model=setting("VOXLIBRIS_LLM_MODEL"),
     )
@@ -563,10 +576,15 @@ def save_chapter(name: str, number: int, text: str = Form(...), title: str = For
 
 
 @app.get("/projects/{name}/page/{number}")
-def chapter_page_image(name: str, number: int, page: int = 0):
-    """Rend une page du PDF d'origine, pour la relecture côte à côte."""
+def chapter_page(name: str, number: int, page: int = 0):
+    """Une page d'origine du chapitre, pour la relecture côte à côte.
+
+    Image rendue pour un PDF ; page HTML servie telle quelle, sans script, pour un EPUB
+    paginé.
+    """
     project = load_project(name)
-    if not project.source or not Path(project.source).suffix.lower() == ".pdf":
+    source = pages.kind(project)
+    if source is None:
         raise HTTPException(404, "Pas de source paginée pour ce projet")
 
     chapter = Chapter.from_markdown(
@@ -577,6 +595,15 @@ def chapter_page_image(name: str, number: int, page: int = 0):
 
     first, last = chapter.source_pages
     wanted = min(max(first + page, first), last)
+    if source == "epub":
+        book = pages.Pages(project.source)
+        if wanted > len(book):
+            raise HTTPException(404, "Page hors du livre")
+        return HTMLResponse(
+            book.page(wanted - 1, f"/projects/{name}/source"),
+            headers={"Content-Security-Policy": pages.CSP},
+        )
+
     cache = project.root / "work" / "pages"
     cache.mkdir(parents=True, exist_ok=True)
     image = cache / f"p{wanted:04d}.png"
@@ -585,6 +612,19 @@ def chapter_page_image(name: str, number: int, page: int = 0):
 
         pymupdf.open(project.source)[wanted - 1].get_pixmap(dpi=150).save(image)
     return FileResponse(image, media_type="image/png")
+
+
+@app.get("/projects/{name}/source/{path:path}")
+def source_asset(name: str, path: str):
+    """Police, image ou feuille de style d'un EPUB paginé, pour afficher ses pages."""
+    project = load_project(name)
+    if pages.kind(project) != "epub":
+        raise HTTPException(404, "Pas de ressources pour ce projet")
+    found = pages.Pages(project.source).asset(path)
+    if found is None:
+        raise HTTPException(404, "Ressource introuvable")
+    data, media = found
+    return Response(data, media_type=media, headers={"Cache-Control": "max-age=86400"})
 
 
 # --- Préparation --------------------------------------------------------------------

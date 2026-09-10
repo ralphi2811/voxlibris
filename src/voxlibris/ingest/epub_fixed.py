@@ -56,6 +56,7 @@ RULE = re.compile(r"\.([A-Za-z_][\w-]*)\s*\{([^}]*)\}")
 PX = re.compile(r"(left|bottom|height)\s*:\s*(-?[\d.]+)px")
 FACE = re.compile(r"@font-face\s*\{[^}]*font-family:\s*(ff\d+)[^}]*url\(([^)]+)\)")
 FONT_CLASS = re.compile(r"^ff\d+$")
+LAYOUT = "pages fixes (pdf2htmlEX)"
 VIEWPORT = re.compile(r"height\s*=\s*(\d+)")
 DROP_CAP = re.compile(r"^[^\W\d_]['’]?$")
 FOLIO = re.compile(r"^[\divxlcIVXLC]+$")
@@ -500,7 +501,7 @@ def ingest(
     report = decoder.describe(resolved)
     broken = sum(p.count(glyphs.UNRESOLVED) for c in chapters for p in c.paragraphs)
 
-    notes: dict[str, object] = {"layout": "pages fixes (pdf2htmlEX)"}
+    notes: dict[str, object] = {"layout": LAYOUT}
     if starts and starts[0][0]:
         notes["skipped"] = [f"{starts[0][0]} pages liminaires avant « {starts[0][1]} »"]
     if blank:
