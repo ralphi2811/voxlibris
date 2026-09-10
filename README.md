@@ -143,7 +143,8 @@ le réglage de vitesse y est sans effet, et le journal le dit plutôt que de l'i
 L'Atelier suit la chaîne du livre, une page par étape, et la barre latérale dit d'un
 coup d'œil où en est chaque livre et ce qui reste à faire.
 
-- **Bibliothèque** : dépôt par glisser-déposer, état de chaque livre, téléchargement.
+- **Bibliothèque** : dépôt par glisser-déposer, titre, auteur et langue proposés d'après
+  le fichier, état de chaque livre, téléchargement.
 - **Chapitres** : titres corrigés en place — ils sont annoncés à voix haute —, chapitres
   retirés ou recollés, métadonnées et couverture du livre audio.
 - **Relecture** : le texte face à la page d'origine — image du PDF, ou page de l'EPUB

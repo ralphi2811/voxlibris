@@ -358,6 +358,23 @@ def index(request: Request):
     return shell(request, "index.html", cards=cards, total_seconds=total, nav="library")
 
 
+@app.post("/peek")
+async def peek_book(file: UploadFile):
+    """Ce que le fichier dit de lui-même, pour préremplir le formulaire de dépôt."""
+    import tempfile
+
+    from ..ingest.metadata import peek
+
+    suffix = Path(file.filename or "").suffix.lower() or ".bin"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as handle:
+        shutil.copyfileobj(file.file, handle)
+        temporary = Path(handle.name)
+    try:
+        return peek(temporary)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 @app.post("/projects")
 async def create_project(
     file: UploadFile,

@@ -19,8 +19,8 @@
     <label class="btn file-pick">{{ icons.ic("book") }}<span id="file-label">Choisir un fichier…</span><input type="file" name="file" required accept=".epub,.pdf,.txt,.md"></label>
   </div>
   <div class="drop-form">
-    <input class="input" type="text" name="title" placeholder="Titre (lu dans le fichier sinon)">
-    <input class="input" type="text" name="author" placeholder="Auteur">
+    <input class="input" type="text" name="title" placeholder="Titre (proposé d'après le fichier)" autocomplete="off">
+    <input class="input" type="text" name="author" placeholder="Auteur" autocomplete="off">
     <div class="row">
       <select class="input" name="language">
         <option value="fr">Français</option>

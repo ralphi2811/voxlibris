@@ -81,10 +81,44 @@
     var input = form.querySelector("input[type=file]"), label = document.getElementById("file-label");
     ["dragenter", "dragover"].forEach(function (ev) { form.addEventListener(ev, function (e) { e.preventDefault(); form.classList.add("over"); }); });
     ["dragleave", "drop"].forEach(function (ev) { form.addEventListener(ev, function (e) { e.preventDefault(); form.classList.remove("over"); }); });
+    var chosen = function () {
+      if (!input.files.length) return;
+      if (label) label.textContent = input.files[0].name;
+      prefill(form, input.files[0]);
+    };
     form.addEventListener("drop", function (e) {
-      if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; if (label) label.textContent = input.files[0].name; }
+      if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; chosen(); }
     });
-    if (input && label) input.addEventListener("change", function () { if (input.files.length) label.textContent = input.files[0].name; });
+    if (input) input.addEventListener("change", chosen);
+  }
+  // Le livre dit son titre, son auteur, sa langue : on les propose, sans écraser ce
+  // que l'utilisateur a tapé lui-même. Un champ rempli par nous est marqué, pour être
+  // remplacé si un autre fichier est choisi ensuite.
+  function prefill(form, file) {
+    var data = new FormData(); data.append("file", file);
+    fetch("/peek", { method: "POST", body: data }).then(function (r) { return r.ok ? r.json() : {}; }).then(function (meta) {
+      // Ce qu'un fichier précédent avait proposé ne vaut plus pour celui-ci.
+      form.querySelectorAll("[data-auto]").forEach(function (field) {
+        if (field.tagName === "SELECT") field.selectedIndex = 0; else field.value = "";
+        delete field.dataset.auto;
+      });
+      ["title", "author", "language"].forEach(function (key) {
+        var field = form.querySelector("[name=" + key + "]");
+        if (!field || !meta[key]) return;
+        if (field.value && field.dataset.auto !== "1" && field.tagName !== "SELECT") return;
+        if (field.tagName === "SELECT") {
+          if (!field.dataset.auto && field.dataset.touched) return;
+          if ([].some.call(field.options, function (o) { return o.value === meta[key]; })) { field.value = meta[key]; field.dataset.auto = "1"; }
+          return;
+        }
+        field.value = meta[key]; field.dataset.auto = "1";
+      });
+    }).catch(function () { /* préremplir est une commodité : en cas d'échec, on laisse les champs */ });
+    form.querySelectorAll("input[name=title], input[name=author]").forEach(function (field) {
+      field.addEventListener("input", function () { delete field.dataset.auto; }, { once: true });
+    });
+    var select = form.querySelector("select[name=language]");
+    if (select) select.addEventListener("change", function () { select.dataset.touched = "1"; delete select.dataset.auto; });
   }
 
   // --- Voix : la liste des voix suit le moteur -----------------------------------------------

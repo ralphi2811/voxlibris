@@ -94,6 +94,15 @@ class TestParcours:
         # Un EPUB n'a rien à relire.
         assert "relecture nécessaire" not in response.text
 
+    def test_le_fichier_se_presente(self, client, make_epub):
+        """Avant l'import, le formulaire demande au livre son titre et sa langue."""
+        path = make_epub(["Le départ"])
+        with path.open("rb") as handle:
+            response = client.post("/peek", files={"file": (path.name, handle)})
+        assert response.status_code == 200
+        assert response.json()["title"] == "Le registre du gardien"
+        assert response.json()["language"] == "fr"
+
     def test_format_refuse_proprement(self, client, tmp_path):
         path = tmp_path / "livre.docx"
         path.write_bytes(b"peu importe")
