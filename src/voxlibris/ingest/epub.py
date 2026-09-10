@@ -125,6 +125,25 @@ def _pick_title(toc_title: str, soup: BeautifulSoup, paragraphs: list[str]) -> s
     return ""
 
 
+def _is_fixed_layout(book, sample: int = 4) -> bool:
+    """Vrai si les premiers documents sont des pages positionnées (pdf2htmlEX)."""
+    import ebooklib
+
+    from .epub_fixed import is_fixed
+
+    seen = 0
+    for spine_id, _ in book.spine:
+        item = book.get_item_with_id(spine_id)
+        if item is None or item.get_type() != ebooklib.ITEM_DOCUMENT:
+            continue
+        if is_fixed(BeautifulSoup(item.get_content(), "html.parser")):
+            return True
+        seen += 1
+        if seen >= sample:
+            break
+    return False
+
+
 def _metadata(book, key: str, default: str = "") -> str:
     try:
         values = book.get_metadata("DC", key)
@@ -140,6 +159,12 @@ def ingest(path: Path, title: str = "", author: str = "") -> Document:
 
     book = epub.read_epub(str(path), options={"ignore_ncx": False})
     toc = _toc_titles(book)
+
+    # Un PDF converti page à page n'a d'EPUB que l'enveloppe : il se lit autrement.
+    if _is_fixed_layout(book):
+        from . import epub_fixed
+
+        return epub_fixed.ingest(book, path, title, author, toc)
 
     chapters: list[Chapter] = []
     skipped: list[str] = []

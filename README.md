@@ -28,6 +28,7 @@ Selon la source, l'effort n'est pas le même — autant le dire franchement :
 | Source | Relecture nécessaire ? |
 |---|---|
 | **EPUB** | Aucune. Chapitres et texte sont déjà propres. |
+| **EPUB issu d'un PDF** (pdf2htmlEX, pages positionnées) | Presque aucune. Lu comme un PDF : paragraphes recomposés, folios et étiquettes de dessins écartés, glyphes de ligatures retrouvés par les polices embarquées puis par le dictionnaire. |
 | **PDF texte natif** | Marginale. |
 | **PDF scanné** | **Oui, et c'est le gros du travail.** L'OCR se trompe, et un `1l` lu à voix haute ne pardonne pas. |
 

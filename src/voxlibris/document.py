@@ -104,6 +104,10 @@ def clean_title(text: str) -> str:
     d'ornements typographiques mal reconnus.
     """
     text = re.sub(r"\s+", " ", text).strip(" .:-—–_*#")
+    # « 4. Comment dresser votre dragon » : le rang est celui du livre, pas le nôtre —
+    # une note de l'auteur en tête décale tout — et l'annonce en dit déjà un. On ne
+    # garde que le nom.
+    text = re.sub(r"^\d+\s*[.:)\-–—]\s+(?=\S)", "", text)
     if text and text.upper() == text:
         # Capitales intégrales : on repasse en casse de titre, en préservant les accents.
         text = text.capitalize()

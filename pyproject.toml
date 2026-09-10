@@ -20,6 +20,9 @@ dependencies = [
     "pymupdf>=1.24",
     "ebooklib>=0.18",
     "beautifulsoup4>=4.12",
+    # Les EPUB issus d'un PDF (pdf2htmlEX) codent parfois leurs ligatures en glyphes
+    # privés : on les retrouve en comparant les contours des polices embarquées.
+    "fonttools>=4.50",
     "num2words>=0.5.13",
     "pyspellchecker>=0.8",
     # Le contrôle qualité analyse les formes d'onde : il appartient au cœur, pas aux
