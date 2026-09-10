@@ -154,21 +154,30 @@
     fill();
   }
 
-  // --- Synthèse : écouter un segment isolé ------------------------------------------------
+  // --- Synthèse : écouter une piste ou un segment isolé ------------------------------------
   // La piste entière est chargée par le navigateur, qui saute à l'instant voulu ; on
-  // arrête la lecture à la fin du segment. Aucun découpage côté serveur.
+  // arrête la lecture à la fin du segment. Aucun découpage côté serveur. Le lecteur
+  // apparaît au premier clic et dit ce qui joue.
   function listen(button) {
-    var player = document.getElementById("player");
+    var player = document.getElementById("player"), bar = document.getElementById("player-bar");
     if (!player) return;
+    var stop = function () {
+      document.querySelectorAll(".listen.playing").forEach(function (b) { b.classList.remove("playing"); });
+    };
+    player.addEventListener("pause", stop);
+    player.addEventListener("ended", stop);
     button.addEventListener("click", function () {
-      var start = Number(button.dataset.start), end = Number(button.dataset.end);
+      if (button.classList.contains("playing")) { player.pause(); return; }
+      var start = Number(button.dataset.start || 0), end = button.dataset.end ? Number(button.dataset.end) : null;
       if (player.dataset.src !== button.dataset.src) { player.src = button.dataset.src; player.dataset.src = button.dataset.src; }
+      if (bar) { bar.hidden = false; document.getElementById("player-label").textContent = button.dataset.label || ""; }
       player.currentTime = start;
       player.play();
-      document.querySelectorAll(".listen.playing").forEach(function (b) { b.classList.remove("playing"); });
+      stop();
       button.classList.add("playing");
+      if (end === null) return;
       var onTime = function () {
-        if (player.currentTime >= end + 0.05) { player.pause(); player.removeEventListener("timeupdate", onTime); button.classList.remove("playing"); }
+        if (player.currentTime >= end + 0.05) { player.pause(); player.removeEventListener("timeupdate", onTime); }
       };
       player.addEventListener("timeupdate", onTime);
     });

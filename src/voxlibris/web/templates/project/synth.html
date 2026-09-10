@@ -26,20 +26,20 @@
           <td class="mono">{{ t.segments or "—" }}</td>
           <td class="mono">{% if t.seconds %}{{ t.seconds|clock }}{% else %}—{% endif %}</td>
           <td>
-            {% if t.current and t.flagged %}<span class="chip warn">{{ t.flagged }} à écouter</span>
+            {% if t.current and t.flagged %}<a class="chip warn" href="/projects/{{ name }}/synth?chapter={{ t.number }}#flagged" title="voir ces segments">{{ t.flagged }} à écouter</a>
             {% elif t.current %}<span class="chip ok">{{ icons.ic("check", 12) }}propre</span>
             {% elif t.synthesized %}<span class="chip warn">périmée</span>
             {% elif not t.segments %}<span class="chip muted">à préparer</span>
             {% else %}<span class="chip muted">à faire</span>{% endif %}
           </td>
-          <td><div class="row end">{% if t.synthesized %}<a class="btn sm ghost" href="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(t.number) }}.wav" title="écouter la piste">{{ icons.ic("play", 14) }}</a>{% endif %}</div></td>
+          <td><div class="row end">{% if t.synthesized %}<button class="btn sm ghost listen" type="button" title="écouter la piste" data-src="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(t.number) }}.wav" data-label="Piste {{ '%02d'|format(t.number) }} · {{ t.title }}">{{ icons.ic("play", 14) }}</button><a class="btn sm ghost" href="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(t.number) }}.wav" download title="télécharger le WAV">{{ icons.ic("download", 14) }}</a>{% endif %}</div></td>
         </tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
 
-    <div class="card">
+    <div class="card" id="flagged">
       <div class="card-head">
         <strong>Segments à l'oreille</strong>
         <span class="chip {% if flagged %}warn{% else %}ok{% endif %}">{{ flagged|length }} signalé{{ "s" if flagged|length != 1 }}</span>
@@ -62,7 +62,7 @@
           <td class="mono muted">{{ f.attempts }}{% if f.split %} · découpé{% endif %}</td>
           <td>
             <div class="row end">
-              <button class="btn sm listen" type="button" data-src="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(f.chapter) }}.wav" data-start="{{ f.start }}" data-end="{{ f.end }}">{{ icons.ic("play", 14) }}Écouter</button>
+              <button class="btn sm listen" type="button" data-src="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(f.chapter) }}.wav" data-start="{{ f.start }}" data-end="{{ f.end }}" data-label="Piste {{ '%02d'|format(f.chapter) }} · segment {{ f.idx }} · {{ f.start|clock }}">{{ icons.ic("play", 14) }}Écouter</button>
               <a class="btn sm" href="/projects/{{ name }}/review/{{ f.chapter }}?find={{ f.text[:40]|urlencode }}">{{ icons.ic("edit", 14) }}Corriger</a>
               <form method="post" action="/projects/{{ name }}/jobs/resynth"><input type="hidden" name="chapter" value="{{ f.chapter }}"><input type="hidden" name="idx" value="{{ f.idx }}"><button class="btn sm" type="submit" {% if job %}disabled{% endif %}>{{ icons.ic("refresh", 14) }}Rejouer</button></form>
             </div>
@@ -116,5 +116,9 @@
     </div>
   </aside>
 </div>
-<audio id="player" hidden></audio>
+<div class="player-bar" id="player-bar" hidden>
+  <span class="ic-wrap">{{ icons.ic("ear", 16) }}</span>
+  <span class="label ellipsis" id="player-label"></span>
+  <audio id="player" controls preload="none"></audio>
+</div>
 {% endblock %}

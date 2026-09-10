@@ -289,6 +289,28 @@ class TestPisteAJour:
         assert not track_is_current(track, segments)
 
 
+class TestFichiers:
+    """Les pistes s'écoutent dans la page ; les livres audio se téléchargent."""
+
+    def test_une_piste_se_lit_en_place(self, client, make_epub):
+        name = TestRelecture._create(None, client, make_epub)
+        from voxlibris.web.app import project_dir
+
+        wav = project_dir(name) / "out" / "wav"
+        wav.mkdir(parents=True)
+        (wav / "ch01.wav").write_bytes(b"RIFF" + b"\0" * 60)
+        (project_dir(name) / "out" / "livre.m4b").write_bytes(b"m4b")
+        response = client.get(f"/projects/{name}/files/wav/ch01.wav")
+        assert response.status_code == 200
+        assert response.headers["content-disposition"].startswith("inline")
+        response = client.get(f"/projects/{name}/files/livre.m4b")
+        assert response.headers["content-disposition"].startswith("attachment")
+        # La page de synthèse propose la lecture et renvoie aux segments à écouter.
+        response = client.get(f"/projects/{name}/synth")
+        assert 'class="btn sm ghost listen"' in response.text
+        assert 'id="player-bar"' in response.text
+
+
 class TestPagesDOrigine:
     """Un EPUB paginé montre ses pages en regard du texte, dans un cadre isolé."""
 

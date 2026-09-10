@@ -96,6 +96,7 @@ h1, h2, h3 { margin: 0; font-weight: 500; }
 .chip.muted { background: var(--surface2); color: var(--ink2); } .chip.accent { background: var(--accent-soft); color: var(--accent); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 button.chip { cursor: pointer; }
+a.chip { text-decoration: none; } a.chip:hover { filter: brightness(1.15); }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .card-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .card-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; margin: 0; }
@@ -230,3 +231,9 @@ mark { background: var(--warn-soft); color: var(--warn); padding: 0 2px; border-
   .atelier { margin-top: 0; }
   .content, .topbar, .jobbar { padding-left: 16px; padding-right: 16px; }
 }
+
+/* --- Lecteur de pistes ------------------------------------------------------------------ */
+.player-bar { position: sticky; bottom: 16px; display: flex; align-items: center; gap: 12px; margin-top: 20px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--line2); border-radius: var(--r-lg); box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.player-bar .label { flex: 1; min-width: 0; font-size: 13px; color: var(--ink2); }
+.player-bar audio { height: 32px; max-width: 420px; }
+.listen.playing { background: var(--accent-soft); color: var(--accent); }

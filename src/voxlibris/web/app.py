@@ -859,7 +859,11 @@ def download(name: str, path: str):
     target = (project.out_dir / path).resolve()
     if not target.is_relative_to(project.out_dir.resolve()) or not target.is_file():
         raise HTTPException(404, "Fichier introuvable")
-    return FileResponse(target, filename=target.name)
+    # Une piste WAV se lit dans la page ; un livre audio se télécharge.
+    inline = target.suffix.lower() == ".wav"
+    return FileResponse(
+        target, filename=target.name, content_disposition_type="inline" if inline else "attachment"
+    )
 
 
 @app.get("/api/voices/{backend}")
