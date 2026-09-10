@@ -1,25 +1,58 @@
+{% import "_icons.html" as icons %}
 <!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}voxlibris{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <header>
-    <a class="brand" href="/">vox<span>libris</span></a>
-    {% block breadcrumb %}{% endblock %}
-  </header>
-  <main>
-    {% block content %}{% endblock %}
+<div class="shell">
+  <aside class="side">
+    <a class="brand" href="/">
+      <span class="mark">{{ icons.ic("mic") }}</span>
+      <span class="wordmark">voxlibris</span>
+    </a>
+    <nav class="nav">
+      <a href="/" {% if nav == "library" %}class="on"{% endif %}>{{ icons.ic("book") }}Bibliothèque</a>
+      <a href="/jobs" {% if nav == "jobs" %}class="on"{% endif %}>{{ icons.ic("list") }}Journal des tâches</a>
+      <a href="/settings" {% if nav == "settings" %}class="on"{% endif %}>{{ icons.ic("gear") }}Réglages</a>
+    </nav>
+    {% if steps %}
+    <div class="side-title">{{ project.title }}</div>
+    <nav class="steps">
+      {% for s in steps %}
+      <a href="{{ s.href }}" class="step {{ s.state }}">
+        <span class="n">{% if s.state == "done" %}{{ icons.ic("check", 12) }}{% else %}{{ loop.index }}{% endif %}</span>
+        <span class="lbl">{{ s.label }}</span>
+        <span class="note {{ s.tone }}">{{ s.note }}</span>
+      </a>
+      {% endfor %}
+    </nav>
+    {% endif %}
+    <div class="atelier" data-poll="/partials/atelier" data-interval="10000" data-forever>
+      {% include "partials/atelier.html" %}
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="crumbs">{% block crumbs %}{% endblock %}</div>
+      <div class="actions">{% block actions %}{% endblock %}</div>
+    </header>
+    {% if job %}
+    <div class="jobbar" data-poll="/projects/{{ name }}/progress" data-interval="2000">
+      {% include "partials/progress.html" %}
+    </div>
+    {% endif %}
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
   </main>
-  <footer>
-    <p>
-      Synthèse locale. Le moteur XTTS-v2 est sous licence
-      <a href="https://coqui.ai/cpml" rel="noopener">CPML</a>, usage non commercial.
-    </p>
-  </footer>
+</div>
 </body>
 </html>

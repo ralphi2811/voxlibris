@@ -1,6 +1,6 @@
 # Interface web de voxlibris. Pas de CUDA, pas de moteur de synthèse : elle dépose des
 # tâches et affiche leur avancement. C'est ce qui la fait tenir en quelques centaines de
-# mégaoctets, là où l'ouvrier en pèse huit gigas.
+# mégaoctets, là où l'atelier en pèse huit gigas.
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \

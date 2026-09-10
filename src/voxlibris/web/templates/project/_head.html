@@ -1,0 +1,28 @@
+{#- En-tête d'un livre : couverture, titre, auteur, repères et actions. -#}
+<div class="book-head">
+  <a class="cover" href="/projects/{{ name }}" style="background-image: url('/projects/{{ name }}/cover')"><span class="serif">{{ project.title }}</span></a>
+  <div class="book-id">
+    <div class="line"><h1 class="serif">{{ project.title }}</h1><span class="muted">{{ project.author }}</span></div>
+    <div class="muted small">
+      {{ (project.kind or "")|upper }}
+      · {{ status["chapitres"] }} chapitre{{ "s" if status["chapitres"] != 1 }}
+      {% if status["segments"] %}· {{ status["segments"] }} segments{% endif %}
+      {% if seconds %}· {{ seconds|minutes }} d'écoute{% endif %}
+      · {{ project.language }}
+    </div>
+    <div class="chips">
+      {% if project.needs_review %}
+        {% if project.pending_review %}<span class="chip warn">{{ icons.ic("warn", 12) }}{{ project.pending_review }} chapitre(s) à relire</span>
+        {% else %}<span class="chip ok">{{ icons.ic("check", 12) }}texte relu</span>{% endif %}
+      {% else %}<span class="chip ok">{{ icons.ic("check", 12) }}texte propre</span>{% endif %}
+      {% if project.voice %}<span class="chip muted">{{ project.backend }} · {{ project.voice }}</span>{% endif %}
+      {% if status["m4b"] %}<span class="chip ok">M4B prêt</span>{% endif %}
+    </div>
+  </div>
+  <div class="row">
+    {% if status["m4b"] %}<a class="btn" href="/projects/{{ name }}/files/{{ status['m4b'].name }}">{{ icons.ic("download") }}M4B</a>{% endif %}
+    <form method="post" action="/projects/{{ name }}/delete" data-confirm="Supprimer « {{ project.title }} » et tout ce qui a été produit ?">
+      <button class="btn ghost danger" type="submit">{{ icons.ic("trash") }}Supprimer</button>
+    </form>
+  </div>
+</div>

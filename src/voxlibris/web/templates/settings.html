@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Réglages — voxlibris{% endblock %}
+{% block crumbs %}<span class="here">Réglages</span>{% endblock %}
+{% block actions %}<span class="chip muted">lus dans .env · modifiables ici</span>{% endblock %}
+
+{% macro field(key, label, placeholder="", secret=False, width="") %}
+{% set s = settings[key] %}
+<label class="field {{ width }}">
+  <span>{{ label }} <em class="origin">{{ s.origin }}</em></span>
+  <input class="input" type="{% if secret %}password{% else %}text{% endif %}" name="{{ key }}" value="{{ s.value }}" placeholder="{{ placeholder }}" autocomplete="off">
+</label>
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <h1 class="serif">Réglages</h1>
+  <span class="sub">Enregistrés dans le dossier des données, partagés avec l'atelier, pris en compte sans redémarrage.{% if saved %} <span class="chip ok">enregistré</span>{% endif %}</span>
+</div>
+
+<form method="post" action="/settings" class="grid two">
+  <section class="card pad stack">
+    <div class="row"><strong>Relecture assistée</strong><span class="spacer"></span><span class="verdict" id="verdict-llm"></span><button class="btn sm" type="button" data-test="llm">{{ icons.ic("refresh", 14) }}Tester</button></div>
+    <input type="hidden" name="VOXLIBRIS_LLM_ENABLED__present" value="1">
+    <label class="toggle-row"><input type="checkbox" name="VOXLIBRIS_LLM_ENABLED" {% if settings["VOXLIBRIS_LLM_ENABLED"].value != "0" %}checked{% endif %}><span class="toggle"></span><span>Proposer des corrections par modèle de langage</span></label>
+    <div class="row">{{ field("VOXLIBRIS_LLM_BASE_URL", "Adresse", "http://localhost:11434/v1", width="grow") }}{{ field("VOXLIBRIS_LLM_MODEL", "Modèle", "gemma4:12b", width="w260") }}</div>
+    {{ field("VOXLIBRIS_LLM_API_KEY", "Clé d'API", "vide pour Ollama ou llama.cpp", secret=True) }}
+    <div class="row">{{ field("VOXLIBRIS_LLM_BATCH", "Formes par requête", "12", width="grow") }}{{ field("VOXLIBRIS_LLM_REASONING", "Raisonnement", "none", width="grow") }}{{ field("VOXLIBRIS_LLM_TIMEOUT", "Délai (s)", "180", width="grow") }}</div>
+    <span class="muted small">Adresse distante : les formes suspectes, et elles seules, partent chez ce fournisseur. Depuis Docker, « localhost » se dit host.docker.internal.</span>
+  </section>
+
+  <section class="card pad stack">
+    <div class="row"><strong>Voxtral TTS</strong><span class="spacer"></span><span class="verdict" id="verdict-voxtral"></span><button class="btn sm" type="button" data-test="voxtral">{{ icons.ic("refresh", 14) }}Tester</button></div>
+    {{ field("VOXLIBRIS_MISTRAL_BASE_URL", "Adresse du serveur", "https://api.mistral.ai/v1 — ou http://voxtral:8600/v1") }}
+    {{ field("VOXLIBRIS_MISTRAL_API_KEY", "Clé Mistral (API seulement)", "inutile pour un serveur local", secret=True) }}
+    <span class="muted small">Adresse locale : aucune clé, aucune facture, aucune modération, et le texte ne quitte pas la machine.</span>
+  </section>
+
+  <section class="card pad stack">
+    <strong>Moteurs et matériel</strong>
+    <input type="hidden" name="COQUI_TOS_AGREED__present" value="1">
+    <label class="toggle-row"><input type="checkbox" name="COQUI_TOS_AGREED" {% if settings["COQUI_TOS_AGREED"].value == "1" %}checked{% endif %}><span class="toggle"></span>
+      <span><strong>XTTS-v2 — j'accepte la licence CPML</strong><br><span class="muted small">Usage non commercial. Rien n'est téléchargé tant que ce n'est pas coché. <a href="https://coqui.ai/cpml" rel="noopener">Lire la licence</a>.</span></span></label>
+    <label class="field"><span>Matériel par défaut <em class="origin">{{ settings["VOXLIBRIS_DEVICE"].origin }}</em></span>
+      <select class="input" name="VOXLIBRIS_DEVICE">
+        <option value="" {% if not settings["VOXLIBRIS_DEVICE"].value %}selected{% endif %}>Carte graphique si présente</option>
+        <option value="cuda" {% if settings["VOXLIBRIS_DEVICE"].value == "cuda" %}selected{% endif %}>Carte graphique</option>
+        <option value="cpu" {% if settings["VOXLIBRIS_DEVICE"].value == "cpu" %}selected{% endif %}>Processeur</option>
+      </select></label>
+    {% if atelier.online %}<div class="chips">{% for e, ok in atelier.engines.items() %}<span class="chip {% if ok %}ok{% else %}muted{% endif %}">{{ e }}</span>{% endfor %}{% if atelier.gpu %}<span class="chip info">{{ atelier.gpu }}</span>{% endif %}</div>{% endif %}
+  </section>
+
+  <section class="card pad stack">
+    <strong>Données</strong>
+    <label class="field"><span>Dossier des projets</span><input class="input" type="text" value="{{ data_dir }}" disabled></label>
+    <span class="muted small">Se change par VOXLIBRIS_DATA, ou VOXLIBRIS_DATA_DIR sous Compose.</span>
+  </section>
+
+  <div class="row full"><button class="btn primary" type="submit">{{ icons.ic("check") }}Enregistrer les réglages</button><span class="muted small">Une clé masquée n'est pas réécrite ; videz le champ pour la retirer.</span></div>
+</form>
+{% endblock %}

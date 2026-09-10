@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }} — préparation{% endblock %}
+{% block crumbs %}<a href="/">Bibliothèque</a>{{ icons.ic("chev", 12) }}<a href="/projects/{{ name }}">{{ project.title }}</a>{{ icons.ic("chev", 12) }}<span class="here">Préparation</span>{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1 class="serif">Préparer les segments</h1>
+  <span class="sub">Découpe le texte en phrases, écrit les nombres en lettres, calcule les silences. Sans effet sur la voix.</span>
+</div>
+
+<div class="cols main-side">
+  <section class="stack">
+    <div class="card">
+      <div class="card-head"><strong>Ce que la voix lira</strong><span class="spacer"></span>
+        {% if status["segments"] %}<span class="chip ok">{{ icons.ic("check", 12) }}{{ status["segments"] }} segments prêts</span>{% else %}<span class="chip muted">pas encore préparé</span>{% endif %}
+      </div>
+      {% if preview %}
+      <table>
+        <thead><tr><th class="w40">#</th><th>Segment</th><th class="w110">Silence après</th></tr></thead>
+        <tbody>
+        {% for s in preview %}
+        <tr><td class="mono muted">{{ s.idx }}</td><td class="serif">{{ s.text }}</td><td class="mono muted">{{ s.pause_after_ms }} ms</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <p class="card-foot muted small">Les huit premiers segments du premier chapitre, tels qu'ils partent au moteur. L'annonce de chapitre est le tout premier.</p>
+      {% else %}
+      <p class="muted pad">Lancez la préparation pour voir les segments.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><strong>Par chapitre</strong></div>
+      <table>
+        <thead><tr><th class="w40">#</th><th>Titre</th><th class="w80">Mots</th><th class="w100">Segments</th></tr></thead>
+        <tbody>
+        {% for t in tracks %}
+        <tr><td class="mono muted">{{ "%02d"|format(t.number) }}</td><td>{{ t.title }}</td><td class="mono">{{ t.words }}</td><td class="mono">{{ t.segments or "—" }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <form class="card pad stack" method="post" action="/projects/{{ name }}/jobs/normalize">
+      <strong>Réglages</strong>
+      <div class="field">
+        <div class="row"><span>Silences</span><span class="spacer"></span><output class="mono" id="pause-out">{{ "%.2f"|format(project.pause_scale) }}×</output></div>
+        <input type="range" name="pause_scale" min="0.5" max="3" step="0.05" value="{{ project.pause_scale }}" data-out="pause-out" data-suffix="×">
+        <span class="muted small">Augmentez si la ponctuation ne s'entend pas assez : 1,3 allonge d'un tiers tous les silences. Il n'y a rien à resynthétiser.</span>
+      </div>
+      <label class="toggle-row"><input type="checkbox" name="announce" {% if project.announce_chapters %}checked{% endif %}><span class="toggle"></span><span>Annoncer les titres de chapitre</span></label>
+      <button class="btn primary" type="submit" {% if job %}disabled{% endif %}>{{ icons.ic("refresh") }}{% if status["segments"] %}Repréparer{% else %}Préparer{% endif %} les segments</button>
+      <span class="muted small">Un chapitre dont le texte n'a pas changé garde sa piste. Les autres seront resynthétisés.</span>
+    </form>
+    {% if status["segments"] %}
+    <a class="btn" href="/projects/{{ name }}/voices">Choisir la voix {{ icons.ic("chev", 14) }}</a>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

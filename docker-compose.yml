@@ -1,6 +1,6 @@
 # voxlibris — un « docker compose up » doit suffire.
 #
-#   docker compose up                                  interface + ouvrier, sans GPU
+#   docker compose up                                  interface + atelier, sans GPU
 #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
 #                                                      idem, avec la carte NVIDIA
 #   docker compose --profile voxtral ... up            ajoute le serveur Voxtral local

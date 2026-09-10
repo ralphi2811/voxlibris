@@ -182,7 +182,7 @@ def unreachable_hint(url: str) -> str:
     """Ce qu'il faut savoir quand « localhost » ne répond pas depuis un conteneur.
 
     Cas vécu : le .env de l'hôte disait localhost:8600, le serveur y tournait, et
-    l'ouvrier sous Compose s'est vu refuser la connexion — pour lui, localhost, c'est
+    l'atelier sous Compose s'est vu refuser la connexion — pour lui, localhost, c'est
     lui-même. Une trace de quarante lignes ne le dit pas ; cette phrase, si.
     """
     host = urllib.parse.urlsplit(url).hostname or ""

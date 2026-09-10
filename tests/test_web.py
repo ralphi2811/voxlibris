@@ -36,7 +36,7 @@ class TestQueue:
         assert queue.get(job.id).state is State.PENDING
 
     def test_une_tache_nest_prise_quune_fois(self, tmp_path):
-        """La prise en charge fait office de verrou entre ouvriers concurrents."""
+        """La prise en charge fait office de verrou entre ateliers concurrents."""
         queue = Queue(tmp_path / "jobs.sqlite")
         queue.enqueue("livre", "normalize")
         assert queue.claim() is not None
@@ -83,7 +83,7 @@ class TestParcours:
     def test_accueil_vide(self, client):
         response = client.get("/")
         assert response.status_code == 200
-        assert "Aucun projet" in response.text
+        assert "Aucun livre" in response.text
 
     def test_depot_dun_epub(self, client, make_epub):
         path = make_epub(["Le départ", "La traversée"])
@@ -119,11 +119,11 @@ class TestSuppression:
         name = self._create(client, make_epub)
         response = client.post(f"/projects/{name}/delete")
         assert response.status_code == 200  # redirection suivie
-        assert "Aucun projet" in response.text
+        assert "Aucun livre" in response.text
         assert client.get(f"/projects/{name}").status_code == 404
 
     def test_refuse_pendant_une_tache(self, client, make_epub):
-        """Supprimer sous les pieds de l'ouvrier le ferait écrire dans le vide."""
+        """Supprimer sous les pieds de l'atelier le ferait écrire dans le vide."""
         name = self._create(client, make_epub)
         client.post(f"/projects/{name}/jobs/normalize")
 

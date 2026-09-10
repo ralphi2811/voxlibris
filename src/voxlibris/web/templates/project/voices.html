@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }} — voix{% endblock %}
+{% block crumbs %}<a href="/">Bibliothèque</a>{{ icons.ic("chev", 12) }}<a href="/projects/{{ name }}">{{ project.title }}</a>{{ icons.ic("chev", 12) }}<span class="here">Voix</span>{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1 class="serif">Choisir la voix</h1>
+  <span class="sub">Le même extrait, lu par chaque voix retenue. Tranchez à l'oreille, pas sur la fiche.</span>
+</div>
+
+<div class="grid engines">
+  {% for key, e in engines.items() %}
+  {% set ok = available.get(key) if available else none %}
+  <div class="card pad engine {% if project.backend == key %}chosen{% endif %}">
+    <div class="row"><strong>{{ e.label }}</strong><span class="spacer"></span>
+      {% if ok is none %}<span class="chip muted">{{ e.where }}</span>
+      {% elif ok %}<span class="chip ok">{{ e.where }}</span>
+      {% else %}<span class="chip bad">absent de l'atelier</span>{% endif %}
+    </div>
+    <span class="muted small">{{ e.blurb }}</span>
+    <div class="chips"><span class="chip {{ e.licence_tone }}">{{ e.licence }}</span>{% if key == "voxtral" %}<span class="chip {% if voxtral_local %}ok{% else %}warn{% endif %}">{% if voxtral_local %}servi en local{% else %}API · texte envoyé{% endif %}</span>{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="cols main-side">
+  <section class="card">
+    <div class="card-head">
+      <strong>Banc d'essai</strong>
+      {% if status["segments"] %}<span class="chip muted">huit segments du premier chapitre</span>{% else %}<span class="chip warn">préparez les segments d'abord</span>{% endif %}
+    </div>
+    {% if samples %}
+    <div class="samples">
+      {% for s in samples %}
+      <div class="sample {% if s.chosen %}chosen{% endif %}">
+        <div class="who"><strong>{{ s.voice }}</strong><span class="muted small">{{ s.label }}</span></div>
+        <audio controls preload="none" src="/projects/{{ name }}/files/{{ s.file }}"></audio>
+        <form method="post" action="/projects/{{ name }}/voice">
+          <input type="hidden" name="backend" value="{{ s.backend }}"><input type="hidden" name="voice" value="{{ s.voice_raw }}">
+          <button class="btn sm {% if s.chosen %}primary{% endif %}" type="submit">{% if s.chosen %}{{ icons.ic("check", 12) }}Choisie{% else %}Choisir{% endif %}</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted pad">Aucun extrait encore. Cochez des voix à droite et lancez la comparaison.</p>
+    {% endif %}
+    <p class="card-foot muted small">Les extraits sont conservés : rien n'est refait deux fois. Choisir une voix mène à la synthèse.</p>
+  </section>
+
+  <aside class="stack">
+    <form class="card pad stack" method="post" action="/projects/{{ name }}/jobs/sample">
+      <strong>Ajouter au banc</strong>
+      <div class="stack tight checks">
+        {% for backend, voice, label, checked in candidates %}
+        <label class="check"><input type="checkbox" name="voice" value="{{ backend }}/{{ voice }}" {% if checked %}checked{% endif %}><span>{{ label }}</span></label>
+        {% endfor %}
+      </div>
+      <div class="field"><span>Une autre voix</span>
+        <div class="row">
+          <select class="input" name="extra_backend" id="extra-backend">{% for key, e in engines.items() %}<option value="{{ key }}">{{ e.label }}</option>{% endfor %}</select>
+          <input class="input grow" type="text" name="extra_voice" id="extra-voice" list="voice-options" placeholder="nom de la voix">
+          <datalist id="voice-options"></datalist>
+        </div>
+      </div>
+      {% if not voxtral_local %}<span class="muted small">Voxtral est facturé à l'usage : quelques centimes pour un extrait, et le texte part chez Mistral.</span>{% endif %}
+      <button class="btn primary" type="submit" {% if job or not status["segments"] %}disabled{% endif %}>{{ icons.ic("mic") }}Synthétiser les extraits</button>
+    </form>
+
+    <div class="card pad stack">
+      <strong>Ce que coûtera le livre entier</strong>
+      <div class="row small"><span class="muted">{{ "{:,}".format(characters).replace(",", " ") }} caractères</span></div>
+      <div class="row small"><span class="muted">Voxtral via l'API Mistral</span><span class="spacer"></span><span>{{ "%.2f"|format(characters / 1000 * 0.016) }} $ · texte envoyé</span></div>
+      <div class="row small"><span class="muted">Tout moteur local</span><span class="spacer"></span><span>0 €</span></div>
+    </div>
+
+    <form class="card pad stack" method="post" action="/projects/{{ name }}/voice">
+      <strong>Ou saisir directement</strong>
+      <div class="row">
+        <select class="input" name="backend" id="direct-backend">{% for key, e in engines.items() %}<option value="{{ key }}" {% if project.backend == key %}selected{% endif %}>{{ e.label }}</option>{% endfor %}</select>
+        <input class="input grow" type="text" name="voice" id="direct-voice" list="voice-options-direct" value="{{ project.voice or '' }}" placeholder="voix">
+        <datalist id="voice-options-direct"></datalist>
+      </div>
+      <button class="btn" type="submit">Retenir cette voix {{ icons.ic("chev", 14) }}</button>
+    </form>
+  </aside>
+</div>
+{% endblock %}

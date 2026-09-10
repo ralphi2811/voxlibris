@@ -1,4 +1,4 @@
-# Surcharge à empiler sur docker-compose.yml pour donner la carte NVIDIA à l'ouvrier.
+# Surcharge à empiler sur docker-compose.yml pour donner la carte NVIDIA à l'atelier.
 # Séparée du fichier principal, sans quoi « docker compose up » échouerait sur toute
 # machine dépourvue de nvidia-container-toolkit — alors que Piper et Kokoro y tournent
 # très bien sur processeur.

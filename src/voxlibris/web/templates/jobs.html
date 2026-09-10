@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Journal — voxlibris{% endblock %}
+{% block crumbs %}{% if scope %}<a href="/">Bibliothèque</a>{{ icons.ic("chev", 12) }}<a href="/projects/{{ scope }}">{{ project.title }}</a>{{ icons.ic("chev", 12) }}{% endif %}<span class="here">Journal des tâches</span>{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1 class="serif">Journal des tâches</h1>
+  <span class="sub">{% if scope %}Ce livre seulement.{% else %}Tous les livres, les plus récentes d'abord.{% endif %}</span>
+</div>
+<div class="card">
+  <table>
+    <thead><tr><th class="w40">#</th>{% if not scope %}<th>Livre</th>{% endif %}<th class="w110">Tâche</th><th class="w110">État</th><th>Message</th><th class="w80">Durée</th><th class="w60"></th></tr></thead>
+    <tbody>
+    {% for j in jobs %}
+    <tr>
+      <td class="mono muted">{{ j.id }}</td>
+      {% if not scope %}<td><a href="/projects/{{ j.project }}">{{ j.project }}</a></td>{% endif %}
+      <td>{{ j.kind }}</td>
+      <td><span class="chip {% if j.state == 'terminé' %}ok{% elif j.state == 'échoué' %}bad{% elif j.state == 'en cours' %}accent{% elif j.state == 'arrêtée' %}warn{% else %}muted{% endif %}">{{ j.state }}</span></td>
+      <td class="ellipsis" title="{{ j.message }}">{{ j.message }}</td>
+      <td class="mono muted">{% if j.started %}{{ "%.0f"|format(j.running_for) }} s{% else %}—{% endif %}</td>
+      <td>
+        {% if j.state in ("en attente", "en cours") %}
+        <form method="post" action="/projects/{{ j.project }}/jobs/{{ j.id }}/cancel"><button class="btn sm ghost danger" type="submit" title="arrêter">{{ icons.ic("stop", 14) }}</button></form>
+        {% elif j.log %}
+        <details class="log-details"><summary class="btn sm ghost">{{ icons.ic("list", 14) }}</summary><pre>{{ j.log[-6000:] }}</pre></details>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Aucune tâche.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

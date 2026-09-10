@@ -43,6 +43,9 @@ class Project:
     # oblige à resynthétiser, les pauses seulement à repréparer les segments.
     speed: float = 1.0
     pause_scale: float = 1.0
+    # Annoncer « Chapitre trois — titre » en tête de chaque piste. On le coupe pour un
+    # recueil dont les titres se suffisent, ou un texte d'un seul tenant.
+    announce_chapters: bool = True
     notes: dict = field(default_factory=dict)
 
     # --- Arborescence ---------------------------------------------------------------
@@ -80,6 +83,18 @@ class Project:
         return self.root / "project.json"
 
     @property
+    def cover(self) -> Path | None:
+        """Couverture déposée par l'utilisateur, si elle existe."""
+        return next(iter(self.root.glob("cover.*")), None)
+
+    @property
+    def cover_source(self) -> Path | None:
+        """D'où tirer la couverture : le fichier déposé, sinon le livre d'origine."""
+        if self.cover:
+            return self.cover
+        return Path(self.source) if self.source else None
+
+    @property
     def text_dir(self) -> Path:
         """Le texte faisant foi : la version relue si elle existe, la brute sinon."""
         return self.clean_dir if any(self.clean_dir.glob("ch*.md")) else self.raw_dir
@@ -108,6 +123,7 @@ class Project:
             "voice": self.voice,
             "speed": self.speed,
             "pause_scale": self.pause_scale,
+            "announce_chapters": self.announce_chapters,
             "notes": self.notes,
         }
         self.config_file.write_text(
@@ -159,6 +175,25 @@ class Project:
         }
 
     # --- Édition ----------------------------------------------------------------------
+    def set_chapter_title(self, number: int, title: str) -> None:
+        """Renomme un chapitre, dans le brut et dans le relu — le titre est annoncé à voix haute."""
+        from .document import Chapter
+
+        title = title.strip()
+        if not title:
+            raise ValueError("Un chapitre a besoin d'un titre.")
+        found = False
+        for directory in (self.raw_dir, self.clean_dir):
+            path = directory / f"ch{number:02d}.md"
+            if not path.exists():
+                continue
+            found = True
+            chapter = Chapter.from_markdown(path.read_text(encoding="utf-8"))
+            chapter.title = title
+            path.write_text(chapter.to_markdown(), encoding="utf-8")
+        if not found:
+            raise FileNotFoundError(f"Le chapitre {number} n'existe pas.")
+
     def delete_chapter(self, number: int) -> dict[str, int]:
         """Supprime un chapitre et renumérote les suivants.
 
@@ -269,6 +304,56 @@ class Project:
         if not self.needs_review:
             return 0
         return sum(1 for state in self.chapter_states() if not state["reviewed"])
+
+    def timing(self, number: int) -> list[dict]:
+        """Le manifeste d'une piste : chaque segment et sa plage dans le fichier."""
+        path = self.wav_dir / f"ch{number:02d}.timing.json"
+        if not path.exists():
+            return []
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            return []
+
+    def tracks(self) -> list[dict[str, object]]:
+        """Chaque chapitre vu du côté de la synthèse : segments, piste, durée, alertes."""
+        rows = []
+        for state in self.chapter_states():
+            number = int(state["number"])
+            segments = self.segments_dir / f"ch{number:02d}.jsonl"
+            track = self.wav_dir / f"ch{number:02d}.wav"
+            timing = self.timing(number)
+            count = 0
+            if segments.exists():
+                count = sum(1 for line in segments.open(encoding="utf-8") if line.strip())
+            rows.append(
+                {
+                    **state,
+                    "segments": count,
+                    "synthesized": track.exists(),
+                    # Une piste plus vieille que ses segments sera refaite à la prochaine synthèse.
+                    "current": track.exists()
+                    and segments.exists()
+                    and track.stat().st_mtime >= segments.stat().st_mtime,
+                    "seconds": timing[-1]["end"] if timing else 0.0,
+                    "flagged": sum(1 for entry in timing if not entry.get("clean", True)),
+                }
+            )
+        return rows
+
+    def flagged_segments(self) -> list[dict[str, object]]:
+        """Les segments que le contrôle qualité n'a pas su rendre propres, toutes pistes."""
+        found = []
+        for state in self.chapter_states():
+            number = int(state["number"])
+            for entry in self.timing(number):
+                if entry.get("clean", True):
+                    continue
+                found.append({"chapter": number, **entry})
+        return found
+
+    def audio_seconds(self) -> float:
+        return sum(float(row["seconds"]) for row in self.tracks())
 
     def status(self) -> dict[str, object]:
         wavs = sorted(self.wav_dir.glob("ch*.wav"))

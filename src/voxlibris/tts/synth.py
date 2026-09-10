@@ -104,6 +104,9 @@ def synthesize_chapter(
                 "end": round((cursor + len(take.audio)) / SAMPLE_RATE, 2),
                 "attempts": take.attempts,
                 "clean": take.clean,
+                # La cause est ce qui permet, depuis l'interface, de trier ce qu'il faut
+                # réécouter : un « trop court » n'a pas la même gravité qu'un « babil ».
+                "cause": "" if take.clean else take.cause,
                 "split": split,
                 "text": segment.text,
             }

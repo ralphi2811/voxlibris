@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }} — chapitres{% endblock %}
+{% block crumbs %}<a href="/">Bibliothèque</a>{{ icons.ic("chev", 12) }}<span class="here">{{ project.title }}</span>{{ icons.ic("chev", 12) }}<span class="here">Chapitres</span>{% endblock %}
+
+{% block content %}
+{% set seconds = tracks|sum(attribute="seconds") %}
+{% include "project/_head.html" %}
+
+<div class="cols main-side">
+  <section class="card">
+    <div class="card-head">
+      <strong>{{ tracks|length }} chapitre{{ "s" if tracks|length != 1 }}</strong>
+      {% if project.notes %}
+        {% for key, value in project.notes.items() if key != "kind" %}<span class="chip info" title="{{ value }}">{{ key }}</span>{% endfor %}
+      {% endif %}
+      <span class="spacer"></span>
+      <span class="muted small">Le titre est annoncé à voix haute : corrigez-le ici.</span>
+    </div>
+    <table>
+      <thead><tr><th class="w40">#</th><th>Titre</th><th class="w80">Mots</th><th class="w140">État</th><th class="w150"></th></tr></thead>
+      <tbody>
+      {% for t in tracks %}
+      <tr>
+        <td class="mono muted">{{ "%02d"|format(t.number) }}</td>
+        <td>
+          <form method="post" action="/projects/{{ name }}/chapters/{{ t.number }}/rename" class="inline-edit">
+            <input class="input serif title-edit" type="text" name="title" value="{{ t.title }}" data-original="{{ t.title }}" required>
+            <button class="btn sm primary save" type="submit" hidden>{{ icons.ic("check", 12) }}</button>
+          </form>
+        </td>
+        <td class="mono">{{ "{:,}".format(t.words).replace(",", " ") }}</td>
+        <td>
+          {% if t.words < 60 %}<span class="chip bad">fragment ?</span>
+          {% elif project.needs_review and not t.reviewed %}<span class="chip warn">à relire</span>
+          {% elif t.current %}<span class="chip ok">synthétisé</span>
+          {% elif t.synthesized %}<span class="chip warn">piste périmée</span>
+          {% else %}<span class="chip ok">prêt</span>{% endif %}
+        </td>
+        <td>
+          <div class="row end">
+            <a class="btn sm ghost" href="/projects/{{ name }}/review/{{ t.number }}" title="ouvrir le texte">{{ icons.ic("edit", 14) }}</a>
+            {% if not job %}
+            <form method="post" action="/projects/{{ name }}/chapters/{{ t.number }}/merge" data-confirm="Recoller le chapitre {{ t.number }} à la fin du chapitre {{ t.number - 1 }} ?">
+              <button class="btn sm ghost" type="submit" title="recoller au chapitre précédent" {% if loop.first %}disabled{% endif %}>{{ icons.ic("merge", 14) }}</button>
+            </form>
+            <form method="post" action="/projects/{{ name }}/chapters/{{ t.number }}/delete" data-confirm="Retirer le chapitre {{ t.number }} « {{ t.title }} » ? Les suivants seront renumérotés.">
+              <button class="btn sm ghost danger" type="submit" title="retirer ce chapitre">{{ icons.ic("trash", 14) }}</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="card-foot muted small">{{ icons.ic("warn", 14) }}Retirer ou recoller un chapitre renumérote la suite et écarte les pistes qui en dépendaient. Rien n'est refait sans votre ordre.</p>
+  </section>
+
+  <aside class="stack">
+    <form class="card pad stack" method="post" action="/projects/{{ name }}/meta">
+      <strong>Métadonnées du livre audio</strong>
+      <label class="field"><span>Titre</span><input class="input" type="text" name="title" value="{{ project.title }}"></label>
+      <label class="field"><span>Auteur</span><input class="input" type="text" name="author" value="{{ project.author }}"></label>
+      <div class="row">
+        <label class="field grow"><span>Année</span><input class="input" type="text" name="year" value="{{ project.year or '' }}" placeholder="—"></label>
+        <label class="field grow"><span>Langue</span>
+          <select class="input" name="language">
+            {% for code, label in [("fr","Français"),("en","English"),("es","Español"),("de","Deutsch"),("it","Italiano")] %}
+            <option value="{{ code }}" {% if project.language == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select></label>
+      </div>
+      <label class="field"><span>Narrateur</span><input class="input" type="text" value="{% if project.voice %}{{ project.backend }} · {{ project.voice }}{% else %}à choisir à l'étape Voix{% endif %}" disabled></label>
+      <button class="btn" type="submit">{{ icons.ic("check") }}Enregistrer</button>
+    </form>
+
+    <form class="card pad stack" method="post" action="/projects/{{ name }}/cover" enctype="multipart/form-data">
+      <strong>Couverture</strong>
+      <div class="row">
+        <span class="cover small" style="background-image: url('/projects/{{ name }}/cover')"></span>
+        <div class="stack tight">
+          <span class="muted small">{% if project.cover %}Image déposée.{% elif has_cover %}Tirée du livre d'origine.{% else %}Aucune : le M4B n'en aura pas.{% endif %}</span>
+          <label class="btn sm file-pick">{{ icons.ic("image", 14) }}<span>Remplacer…</span><input type="file" name="file" accept=".jpg,.jpeg,.png" required data-submit></label>
+        </div>
+      </div>
+    </form>
+  </aside>
+</div>
+{% endblock %}

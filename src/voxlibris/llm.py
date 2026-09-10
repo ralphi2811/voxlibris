@@ -71,8 +71,11 @@ class LLMConfig:
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> LLMConfig:
         if env is None:
+            from .config import read_settings
+
             load_env()
-            env = dict(os.environ)
+            # Les réglages faits dans l'interface priment sur le .env et l'environnement.
+            env = {**os.environ, **read_settings()}
         return cls(
             base_url=env.get("VOXLIBRIS_LLM_BASE_URL") or DEFAULT_BASE_URL,
             model=env.get("VOXLIBRIS_LLM_MODEL") or DEFAULT_MODEL,

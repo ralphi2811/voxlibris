@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }} — synthèse{% endblock %}
+{% block crumbs %}<a href="/">Bibliothèque</a>{{ icons.ic("chev", 12) }}<a href="/projects/{{ name }}">{{ project.title }}</a>{{ icons.ic("chev", 12) }}<span class="here">Synthèse</span>{% endblock %}
+{% block actions %}<a class="btn ghost" href="/projects/{{ name }}/jobs">{{ icons.ic("list") }}Journal</a>{% endblock %}
+
+{% block content %}
+{% set seconds = tracks|sum(attribute="seconds") %}
+{% set current = tracks|selectattr("current")|list|length %}
+{% include "project/_head.html" %}
+
+<div class="cols main-side">
+  <section class="stack">
+    <div class="card">
+      <div class="card-head">
+        <strong>Pistes</strong>
+        <span class="chip {% if tracks and current == tracks|length %}ok{% else %}muted{% endif %}">{{ current }}/{{ tracks|length }} à jour</span>
+        {% if seconds %}<span class="muted small">{{ seconds|minutes }} produites</span>{% endif %}
+      </div>
+      <table>
+        <thead><tr><th class="w40">#</th><th>Titre</th><th class="w90">Segments</th><th class="w90">Durée</th><th class="w130">État</th><th class="w110"></th></tr></thead>
+        <tbody>
+        {% for t in tracks %}
+        <tr>
+          <td class="mono muted">{{ "%02d"|format(t.number) }}</td>
+          <td>{{ t.title }}</td>
+          <td class="mono">{{ t.segments or "—" }}</td>
+          <td class="mono">{% if t.seconds %}{{ t.seconds|clock }}{% else %}—{% endif %}</td>
+          <td>
+            {% if t.current and t.flagged %}<span class="chip warn">{{ t.flagged }} à écouter</span>
+            {% elif t.current %}<span class="chip ok">{{ icons.ic("check", 12) }}propre</span>
+            {% elif t.synthesized %}<span class="chip warn">périmée</span>
+            {% elif not t.segments %}<span class="chip muted">à préparer</span>
+            {% else %}<span class="chip muted">à faire</span>{% endif %}
+          </td>
+          <td><div class="row end">{% if t.synthesized %}<a class="btn sm ghost" href="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(t.number) }}.wav" title="écouter la piste">{{ icons.ic("play", 14) }}</a>{% endif %}</div></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <strong>Segments à l'oreille</strong>
+        <span class="chip {% if flagged %}warn{% else %}ok{% endif %}">{{ flagged|length }} signalé{{ "s" if flagged|length != 1 }}</span>
+        <span class="spacer"></span>
+        <form method="get" action="/projects/{{ name }}/synth" class="row" data-autosubmit>
+          <select class="input sm" name="chapter"><option value="0">Tous les chapitres</option>{% for t in tracks %}<option value="{{ t.number }}" {% if filter_chapter == t.number %}selected{% endif %}>{{ "%02d"|format(t.number) }} · {{ t.title|truncate(28) }}</option>{% endfor %}</select>
+          <select class="input sm" name="cause"><option value="">Toutes causes</option>{% for c in causes %}<option value="{{ c }}" {% if filter_cause == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+        </form>
+      </div>
+      {% if flagged %}
+      <table class="flagged">
+        <thead><tr><th class="w60">Seg.</th><th class="w70">Instant</th><th>Texte</th><th class="w110">Cause</th><th class="w90">Essais</th><th class="w230"></th></tr></thead>
+        <tbody>
+        {% for f in flagged %}
+        <tr>
+          <td class="mono muted">{{ "%02d"|format(f.chapter) }}·{{ f.idx }}</td>
+          <td class="mono">{{ f.start|clock }}</td>
+          <td class="ellipsis serif" title="{{ f.text }}">{{ f.text }}</td>
+          <td><span class="chip warn">{{ f.cause or "à vérifier" }}</span></td>
+          <td class="mono muted">{{ f.attempts }}{% if f.split %} · découpé{% endif %}</td>
+          <td>
+            <div class="row end">
+              <button class="btn sm listen" type="button" data-src="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(f.chapter) }}.wav" data-start="{{ f.start }}" data-end="{{ f.end }}">{{ icons.ic("play", 14) }}Écouter</button>
+              <a class="btn sm" href="/projects/{{ name }}/review/{{ f.chapter }}?find={{ f.text[:40]|urlencode }}">{{ icons.ic("edit", 14) }}Corriger</a>
+              <form method="post" action="/projects/{{ name }}/jobs/resynth"><input type="hidden" name="chapter" value="{{ f.chapter }}"><input type="hidden" name="idx" value="{{ f.idx }}"><button class="btn sm" type="submit" {% if job %}disabled{% endif %}>{{ icons.ic("refresh", 14) }}Rejouer</button></form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted pad">{% if tracks|selectattr("synthesized")|list %}Le contrôle qualité n'a rien laissé passer.{% else %}Rien à écouter tant qu'aucune piste n'est synthétisée.{% endif %}</p>
+      {% endif %}
+      <p class="card-foot muted small">{{ icons.ic("ear", 14) }}Un segment rejoué remplace sa plage dans la piste, sans resynthétiser le chapitre. Réassemblez ensuite.</p>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <form class="card pad stack" method="post" action="/projects/{{ name }}/jobs/synth" id="synth-form">
+      <strong>Réglages de synthèse</strong>
+      <div class="field"><span>Moteur</span>
+        <div class="seg" id="engine-picker">
+          {% for key, e in engines.items() %}
+          <label><input type="radio" name="backend" value="{{ key }}" {% if (project.backend or "xtts") == key %}checked{% endif %}><span>{{ e.label|replace("-v2","")|replace("-82M","")|replace(" TTS","") }}</span></label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="field"><span>Voix</span>
+        <input class="input" type="text" name="voice" id="synth-voice" list="synth-voices" value="{{ project.voice or '' }}" placeholder="voix par défaut du moteur">
+        <datalist id="synth-voices"></datalist>
+        <a class="muted small" href="/projects/{{ name }}/voices">{{ icons.ic("ear", 12) }} Comparer des voix</a>
+      </div>
+      <div class="field">
+        <div class="row"><span>Vitesse</span><span class="spacer"></span><output class="mono" id="speed-out">{{ "%.2f"|format(project.speed) }}×</output></div>
+        <input type="range" name="speed" min="{{ speed_range[0] }}" max="{{ speed_range[1] }}" step="0.05" value="{{ project.speed }}" data-out="speed-out" data-suffix="×">
+        <span class="muted small" id="speed-hint" data-nospeed="{{ supports_speed|reject('eq', true)|list|length }}">Changer la vitesse refait tout le livre, pour un débit constant.</span>
+      </div>
+      <div class="field"><span>Matériel</span>
+        <select class="input" name="device"><option value="">Automatique{% if atelier.online %} · {{ atelier.device }}{% endif %}</option><option value="cuda">Carte graphique</option><option value="cpu">Processeur</option></select>
+      </div>
+      <label class="toggle-row"><input type="checkbox" name="force"><span class="toggle"></span><span>Tout resynthétiser, même l'inchangé</span></label>
+      <button class="btn primary" type="submit" {% if job or not status["segments"] %}disabled{% endif %}>{{ icons.ic("play") }}{% if current %}Relancer la synthèse{% else %}Lancer la synthèse{% endif %}</button>
+      {% if not status["segments"] %}<span class="muted small">Préparez les segments d'abord.</span>{% endif %}
+    </form>
+
+    <div class="card pad stack">
+      <div class="row"><strong>Journal</strong><span class="spacer"></span><a class="muted small" href="/projects/{{ name }}/jobs">tout voir</a></div>
+      <div class="log mono">
+        {% for j in jobs[:4] %}
+        <div><span class="muted">{{ j.kind }}</span> <span class="{% if j.state == 'échoué' %}bad{% elif j.state == 'arrêtée' %}warn{% endif %}">{{ j.state }}</span> — {{ j.message|truncate(90) }}</div>
+        {% else %}<div class="muted">aucune tâche encore</div>{% endfor %}
+      </div>
+    </div>
+  </aside>
+</div>
+<audio id="player" hidden></audio>
+{% endblock %}

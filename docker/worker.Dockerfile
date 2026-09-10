@@ -1,4 +1,4 @@
-# Ouvrier de voxlibris : le seul conteneur qui porte les moteurs de synthèse et CUDA.
+# Atelier de voxlibris : le seul conteneur qui porte les moteurs de synthèse et CUDA.
 #
 # L'image de base fournit torch compilé pour CUDA ; le réinstaller depuis PyPI donnerait
 # une roue CPU. Voir worker.constraints.txt, qui verrouille exactement cela.

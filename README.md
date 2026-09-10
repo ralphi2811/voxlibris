@@ -137,6 +137,32 @@ par défaut. Comptez 0,016 $ pour mille caractères — environ 1,30 $ pour un r
 l'interface annonce avant de lancer la synthèse. L'API n'offre aucun réglage de débit :
 le réglage de vitesse y est sans effet, et le journal le dit plutôt que de l'ignorer.
 
+## L'interface
+
+L'Atelier suit la chaîne du livre, une page par étape, et la barre latérale dit d'un
+coup d'œil où en est chaque livre et ce qui reste à faire.
+
+- **Bibliothèque** : dépôt par glisser-déposer, état de chaque livre, téléchargement.
+- **Chapitres** : titres corrigés en place — ils sont annoncés à voix haute —, chapitres
+  retirés ou recollés, métadonnées et couverture du livre audio.
+- **Relecture** : le texte face à la page numérisée, les formes suspectes filtrées par
+  cause, les propositions du modèle acceptées ou écartées une à une, rechercher-remplacer.
+- **Préparation** : silences, annonce des chapitres, et les segments tels qu'ils partent
+  au moteur. Un chapitre dont le texte n'a pas changé garde sa piste.
+- **Voix** : les moteurs avec leur licence et ce que l'atelier sait charger, un banc
+  d'essai sur le même extrait, le coût du livre entier par moteur.
+- **Synthèse** : réglages, avancement segment par segment, bouton d'arrêt, et le tableau
+  des **segments à l'oreille** — instant, cause, écouter, corriger, rejouer. Rejouer un
+  segment le recolle dans sa piste sans refaire le chapitre.
+- **Assemblage** et **Journal** des tâches.
+- **Réglages** : modèle de langage, Voxtral, licence XTTS, matériel — enregistrés dans le
+  dossier des données, partagés avec l'atelier, pris en compte sans redémarrage, avec un
+  bouton Tester par service. Le `.env` reste la couche de dessous.
+
+L'**atelier** est le processus qui exécute les tâches — le service `worker` sous Compose.
+Il bat toutes les cinq secondes dans `atelier.json` ; l'interface en déduit s'il est là,
+sa carte graphique et ses moteurs.
+
 ## Démarrage
 
 ```bash
@@ -146,12 +172,12 @@ docker compose up
 ```
 
 L'interface est sur `http://localhost:8000`. Deux conteneurs tournent : l'interface,
-légère, et l'ouvrier, qui porte les moteurs de synthèse. Les projets vivent dans `./data`
+légère, et l'atelier, qui porte les moteurs de synthèse. Les projets vivent dans `./data`
 sur l'hôte — `VOXLIBRIS_DATA_DIR` dans le `.env` pour les mettre ailleurs.
 
 **Sans GPU**, Piper et Kokoro tournent sur processeur, et c'est ce que fait la commande
 ci-dessus. **Avec une carte NVIDIA** et `nvidia-container-toolkit`, empilez la surcharge
-qui la donne à l'ouvrier — XTTS en a besoin :
+qui la donne à l'atelier — XTTS en a besoin :
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
@@ -189,7 +215,7 @@ dites-le à Compose — les shells ne l'exportent pas :
 printf 'UID=%s\nGID=%s\n' "$(id -u)" "$(id -g)" >> .env
 ```
 
-Le premier `up` construit les images, et l'ouvrier est lourd — c'est PyTorch avec CUDA :
+Le premier `up` construit les images, et l'atelier est lourd — c'est PyTorch avec CUDA :
 
 | Image | Taille | Contenu |
 |---|---|---|
@@ -199,7 +225,7 @@ Le premier `up` construit les images, et l'ouvrier est lourd — c'est PyTorch a
 
 Les poids eux-mêmes se téléchargent à la première synthèse, dans le volume `models`.
 
-La ligne de commande passe par le même ouvrier ; les fichiers doivent être sous `./data`,
+La ligne de commande passe par le même atelier ; les fichiers doivent être sous `./data`,
 qui est `/data` dans le conteneur :
 
 ```bash

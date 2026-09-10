@@ -1,0 +1,2 @@
+{% import "_icons.html" as icons %}
+<span class="chip {% if ok %}ok{% else %}bad{% endif %}">{% if ok %}{{ icons.ic("check", 12) }}{% else %}{{ icons.ic("x", 12) }}{% endif %}{{ text }}</span>

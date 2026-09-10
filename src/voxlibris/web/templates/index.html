@@ -1,60 +1,62 @@
 {% extends "base.html" %}
+{% block title %}Bibliothèque — voxlibris{% endblock %}
+{% block crumbs %}<span class="here">Bibliothèque</span>{% endblock %}
+{% block actions %}
+<label class="input search"><span class="ic-wrap">{{ icons.ic("search", 14) }}</span><input type="search" id="filter" placeholder="Rechercher un livre…" autocomplete="off"></label>
+{% endblock %}
 
 {% block content %}
-<section class="intro">
-  <h1>Vos livres audio</h1>
-  <p>
-    Déposez un EPUB, un PDF ou un fichier texte. Un EPUB traverse toute la chaîne sans
-    intervention ; un scan demandera une relecture, que l'éditeur intégré rend rapide.
-  </p>
-</section>
+<div class="page-head">
+  <h1 class="serif">Vos livres audio</h1>
+  <span class="sub">{{ cards|length }} livre{{ "s" if cards|length != 1 }}{% if total_seconds %} · {{ total_seconds|minutes }} d'écoute produite{% endif %}</span>
+</div>
 
-<form class="upload" method="post" action="/projects" enctype="multipart/form-data">
-  <label class="drop">
-    <input type="file" name="file" accept=".epub,.pdf,.txt,.md" required>
-    <span>Choisir un fichier</span>
-  </label>
-  <div class="fields">
-    <input type="text" name="title" placeholder="Titre (facultatif)">
-    <input type="text" name="author" placeholder="Auteur (facultatif)">
+<form class="card dropzone" method="post" action="/projects" enctype="multipart/form-data" id="drop">
+  <div class="drop-text">
+    <div class="drop-title"><span class="ic-box">{{ icons.ic("upload", 20) }}</span><span>Déposez un livre ici</span></div>
+    <p class="muted">EPUB, PDF, scan ou texte. Un EPUB traverse toute la chaîne sans intervention ; un scan passera par la relecture, que l'éditeur rend rapide.</p>
+    <div class="chips"><span class="chip muted">.epub</span><span class="chip muted">.pdf</span><span class="chip muted">.txt · .md</span><span class="chip muted">scan (OCR)</span></div>
+    <label class="btn file-pick">{{ icons.ic("book") }}<span id="file-label">Choisir un fichier…</span><input type="file" name="file" required accept=".epub,.pdf,.txt,.md"></label>
   </div>
-  <button type="submit">Extraire</button>
+  <div class="drop-form">
+    <input class="input" type="text" name="title" placeholder="Titre (lu dans le fichier sinon)">
+    <input class="input" type="text" name="author" placeholder="Auteur">
+    <div class="row">
+      <select class="input" name="language">
+        <option value="fr">Français</option>
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="de">Deutsch</option>
+        <option value="it">Italiano</option>
+      </select>
+      <button class="btn primary" type="submit">{{ icons.ic("plus") }}Importer</button>
+    </div>
+  </div>
 </form>
 
-{% if projects %}
-<table class="projects">
-  <thead>
-    <tr><th>Livre</th><th>Format</th><th>Chapitres</th><th>Voix</th><th></th></tr>
-  </thead>
-  <tbody>
-    {% for name, project in projects %}
-    <tr>
-      <td>
-        <a href="/projects/{{ name }}">{{ project.title }}</a>
-        <small>{{ project.author }}</small>
-      </td>
-      <td><code>{{ project.kind or "—" }}</code></td>
-      <td>{{ project.status()["chapitres"] }}</td>
-      <td>{{ project.voice or "—" }}</td>
-      <td class="right actions-cell">
-        {% set m4b = project.status()["m4b"] %}
-        {% if m4b %}
-          <a class="button" href="/projects/{{ name }}/files/{{ m4b.name }}">Télécharger</a>
-        {% elif project.needs_review %}
-          <span class="tag warn">à relire</span>
-        {% endif %}
-        <form method="post" action="/projects/{{ name }}/delete"
-              data-confirm="Supprimer « {{ project.title }} » ? {{ project.status()['chapitres'] }} chapitre(s){% if m4b %}, le livre audio assemblé{% endif %} et le texte relu seront perdus.">
-          <button type="submit" class="ghost danger-button" title="Supprimer ce projet">
-            Supprimer
-          </button>
+{% if cards %}
+<div class="grid books" id="books">
+  {% for c in cards %}
+  <article class="card book" data-search="{{ (c.project.title ~ ' ' ~ c.project.author)|lower }}">
+    <a class="cover" href="/projects/{{ c.name }}" style="background-image: url('/projects/{{ c.name }}/cover')"><span class="serif">{{ c.project.title }}</span></a>
+    <div class="body">
+      <a class="serif title" href="/projects/{{ c.name }}">{{ c.project.title }}</a>
+      <div class="muted">{{ c.project.author }}</div>
+      <div class="muted small">{{ c.kind|upper }} · {{ c.chapters }} chapitre{{ "s" if c.chapters != 1 }}{% if c.seconds %} · {{ c.seconds|minutes }}{% endif %}</div>
+      <div class="book-foot">
+        <span class="chip {{ c.tone }}">{{ c.label }}</span>
+        <span class="spacer"></span>
+        {% if c.m4b %}<a class="btn sm ghost" href="/projects/{{ c.name }}/files/{{ c.m4b.name }}" title="télécharger le M4B">{{ icons.ic("download", 14) }}</a>{% endif %}
+        <form method="post" action="/projects/{{ c.name }}/delete" data-confirm="Supprimer « {{ c.project.title }} » et tout ce qui a été produit ?">
+          <button class="btn sm ghost danger" type="submit" title="supprimer le projet">{{ icons.ic("trash", 14) }}</button>
         </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+      </div>
+      {% if c.progress is not none %}<div class="bar"><i style="width: {{ (c.progress * 100)|round }}%"></i></div>{% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</div>
 {% else %}
-<p class="empty">Aucun projet pour l'instant.</p>
+<p class="muted">Aucun livre pour l'instant. Le dépôt ci-dessus crée le premier.</p>
 {% endif %}
 {% endblock %}

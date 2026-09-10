@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }} — assemblage{% endblock %}
+{% block crumbs %}<a href="/">Bibliothèque</a>{{ icons.ic("chev", 12) }}<a href="/projects/{{ name }}">{{ project.title }}</a>{{ icons.ic("chev", 12) }}<span class="here">Assemblage</span>{% endblock %}
+
+{% block content %}
+{% set seconds = tracks|sum(attribute="seconds") %}
+{% set ready = tracks|selectattr("current")|list|length %}
+<div class="page-head">
+  <h1 class="serif">Assembler le livre audio</h1>
+  <span class="sub">Normalise le niveau sonore, écrit les MP3 et le M4B chapitré avec sa couverture.</span>
+</div>
+
+<div class="cols main-side">
+  <section class="stack">
+    <div class="card">
+      <div class="card-head"><strong>Pistes à assembler</strong><span class="chip {% if tracks and ready == tracks|length %}ok{% else %}warn{% endif %}">{{ ready }}/{{ tracks|length }} prêtes</span>{% if seconds %}<span class="muted small">{{ seconds|minutes }} au total</span>{% endif %}</div>
+      <table>
+        <thead><tr><th class="w40">#</th><th>Titre</th><th class="w90">Durée</th><th class="w130">État</th></tr></thead>
+        <tbody>
+        {% for t in tracks %}
+        <tr><td class="mono muted">{{ "%02d"|format(t.number) }}</td><td>{{ t.title }}</td><td class="mono">{% if t.seconds %}{{ t.seconds|clock }}{% else %}—{% endif %}</td>
+          <td>{% if t.current %}<span class="chip ok">prête</span>{% elif t.synthesized %}<span class="chip warn">périmée</span>{% else %}<span class="chip muted">manquante</span>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if status["m4b"] or mp3s %}
+    <div class="card">
+      <div class="card-head"><strong>Fichiers produits</strong></div>
+      <div class="files">
+        {% if status["m4b"] %}<a class="file" href="/projects/{{ name }}/files/{{ status['m4b'].name }}">{{ icons.ic("download") }}<span>{{ status["m4b"].name }}</span><span class="muted small">M4B chapitré</span></a>{% endif %}
+        {% for m in mp3s %}<a class="file" href="/projects/{{ name }}/files/{{ m }}">{{ icons.ic("download") }}<span>{{ m|replace("mp3/", "") }}</span></a>{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="stack">
+    <form class="card pad stack" method="post" action="/projects/{{ name }}/jobs/assemble">
+      <strong>Options</strong>
+      <label class="toggle-row"><input type="checkbox" checked disabled><span class="toggle"></span><span>M4B chapitré{% if has_cover %} avec couverture{% endif %}</span></label>
+      <label class="toggle-row"><input type="checkbox" name="mp3" checked><span class="toggle"></span><span>Un MP3 par chapitre</span></label>
+      <div class="row small"><span class="muted">Niveau</span><span class="spacer"></span><span class="mono">{{ loudness|int }} LUFS · EBU R128</span></div>
+      <div class="row small"><span class="muted">Métadonnées</span><span class="spacer"></span><span>{{ project.title }} · {{ project.author }}</span></div>
+      <button class="btn primary" type="submit" {% if job or not ready %}disabled{% endif %}>{{ icons.ic("download") }}Assembler</button>
+      {% if not ready %}<span class="muted small">Aucune piste à jour : passez par la synthèse.</span>{% endif %}
+    </form>
+    <div class="card pad stack">
+      <div class="row"><strong>Journal</strong><span class="spacer"></span><a class="muted small" href="/projects/{{ name }}/jobs">tout voir</a></div>
+      <div class="log mono">
+        {% for j in jobs[:4] %}<div><span class="muted">{{ j.kind }}</span> {{ j.state }} — {{ j.message|truncate(90) }}</div>{% else %}<div class="muted">aucune tâche encore</div>{% endfor %}
+      </div>
+    </div>
+  </aside>
+</div>
+{% endblock %}

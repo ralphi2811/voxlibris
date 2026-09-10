@@ -142,6 +142,12 @@ class XttsBackend(Backend):
     ) -> None:
         from TTS.api import TTS
 
+        # Le réglage peut venir de la page Réglages plutôt que de l'environnement ; la
+        # bibliothèque, elle, ne lit que l'environnement : on l'y recopie.
+        from ..config import setting
+
+        if setting("COQUI_TOS_AGREED") == "1":
+            os.environ["COQUI_TOS_AGREED"] = "1"
         if not os.environ.get("COQUI_TOS_AGREED"):
             raise RuntimeError(
                 "XTTS-v2 est sous licence CPML (usage non commercial). Positionnez "
@@ -332,5 +338,5 @@ def load(
         raise RuntimeError(
             f"Le moteur {name!r} n'est pas installé ({error.name} manquant). "
             "Installez les moteurs de synthèse avec « uv sync --extra tts », ou "
-            "utilisez l'image Docker de l'ouvrier, qui les embarque."
+            "utilisez l'image Docker de l'atelier, qui les embarque."
         ) from error

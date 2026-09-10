@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{{ chapter.title }} — relecture{% endblock %}
+{% block crumbs %}<a href="/">Bibliothèque</a>{{ icons.ic("chev", 12) }}<a href="/projects/{{ name }}">{{ project.title }}</a>{{ icons.ic("chev", 12) }}<span class="here">Relecture · ch. {{ "%02d"|format(chapter.number) }}</span>{% endblock %}
+{% block actions %}
+{% if suspects %}<span class="chip warn">{{ suspects|length }} forme{{ "s" if suspects|length != 1 }} à vérifier</span>{% else %}<span class="chip ok">{{ icons.ic("check", 12) }}rien à signaler</span>{% endif %}
+{% if llm_enabled and not job %}
+<form method="post" action="/projects/{{ name }}/jobs/proofread"><button class="btn ghost" type="submit" title="{{ llm_model or 'modèle configuré dans Réglages' }}">{{ icons.ic("sparkle") }}Relire avec le modèle</button></form>
+{% endif %}
+<button class="btn primary" type="submit" form="review-form">{{ icons.ic("check") }}Enregistrer</button>
+{% endblock %}
+
+{% block content %}
+<div class="review-bar">
+  {% if previous %}<a class="btn sm ghost" href="/projects/{{ name }}/review/{{ previous }}">{{ icons.ic("back", 14) }}</a>{% else %}<span class="btn sm ghost" aria-disabled="true">{{ icons.ic("back", 14) }}</span>{% endif %}
+  <select class="input" id="chapter-jump" style="min-width: 320px">
+    {% for n in numbers %}<option value="/projects/{{ name }}/review/{{ n }}" {% if n == chapter.number %}selected{% endif %}>{{ "%02d"|format(n) }} · {{ titles.get(n, "") }}</option>{% endfor %}
+  </select>
+  {% if following %}<a class="btn sm ghost" href="/projects/{{ name }}/review/{{ following }}">{{ icons.ic("chev", 14) }}</a>{% else %}<span class="btn sm ghost" aria-disabled="true">{{ icons.ic("chev", 14) }}</span>{% endif %}
+  <span class="muted small">{{ chapter.word_count }} mots{% if chapter.source_pages %} · pages {{ chapter.source_pages[0] }}–{{ chapter.source_pages[1] }}{% endif %}</span>
+  <span class="spacer"></span>
+  <label class="input search sm"><span class="ic-wrap">{{ icons.ic("search", 14) }}</span><input type="search" id="find" placeholder="Rechercher" value="{{ find }}"></label>
+  <input class="input sm" type="text" id="replace" placeholder="Remplacer par">
+  <button class="btn sm" type="button" id="replace-one">Remplacer</button>
+  <button class="btn sm ghost" type="button" id="replace-all">Tout</button>
+</div>
+
+<div class="review {% if not chapter.source_pages %}no-page{% endif %}">
+  <form class="editor" id="review-form" method="post" action="/projects/{{ name }}/review/{{ chapter.number }}">
+    <input class="input serif title-edit big" type="text" name="title" value="{{ chapter.title }}" required>
+    <textarea class="serif" name="text" spellcheck="true" lang="{{ project.language }}">{{ chapter.text }}</textarea>
+    <p class="muted small">{{ icons.ic("warn", 14) }}Une ligne vide sépare deux paragraphes. La version brute est conservée : Enregistrer écrit la version relue à côté.</p>
+  </form>
+
+  {% if chapter.source_pages %}
+  <aside class="page-pane">
+    <div class="row">
+      <span class="label">Page <span id="page-label">{{ chapter.source_pages[0] }}</span></span>
+      <span class="spacer"></span>
+      <button class="btn sm ghost" type="button" id="page-prev">{{ icons.ic("back", 14) }}</button>
+      <button class="btn sm ghost" type="button" id="page-next">{{ icons.ic("chev", 14) }}</button>
+    </div>
+    <img id="page-image" src="/projects/{{ name }}/page/{{ chapter.number }}?page=0" alt="page numérisée"
+         data-first="{{ chapter.source_pages[0] }}" data-total="{{ chapter.source_pages[1] - chapter.source_pages[0] + 1 }}"
+         data-url="/projects/{{ name }}/page/{{ chapter.number }}">
+  </aside>
+  {% endif %}
+
+  <aside class="proposals">
+    <div class="card-head">
+      <strong>Propositions</strong>
+      {% if suggestions %}<span class="chip info">{{ suggestions|length }} du modèle</span>{% endif %}
+      <span class="spacer"></span>
+      <span class="chip muted" id="suspect-count">{{ suspects|length }}</span>
+    </div>
+    <div class="chips filter-bar" id="reason-filter">
+      <button type="button" class="chip accent on" data-reason="">Toutes</button>
+      {% if suggestions %}<button type="button" class="chip muted" data-reason="modèle">modèle</button>{% endif %}
+      {% for r in reasons %}<button type="button" class="chip muted" data-reason="{{ r }}">{{ r }}</button>{% endfor %}
+    </div>
+    <div class="proposal-list">
+      {% for s in suggestions %}
+      <div class="proposal" data-reason="modèle">
+        <div class="row">
+          <span class="mono bad strike">{{ s.word }}</span>{{ icons.ic("chev", 12) }}<span class="mono ok strong">{{ s.replacement }}</span>
+          <span class="spacer"></span><span class="chip muted">{{ s.reason }}</span>
+        </div>
+        <div class="serif muted small ctx">{{ s.context }}</div>
+        <div class="row">
+          <span class="muted tiny">{% if s.recurrence > 1 %}revient {{ s.recurrence }} fois{% else %}forme unique{% endif %}</span>
+          <span class="spacer"></span>
+          <button type="button" class="btn sm primary accept" data-word="{{ s.word }}" data-offset="{{ s.offset }}" data-replacement="{{ s.replacement }}">{{ icons.ic("check", 12) }}Accepter</button>
+          <button type="button" class="btn sm ghost dismiss">Ignorer</button>
+        </div>
+      </div>
+      {% endfor %}
+      {% for s in suspects %}
+      <div class="proposal suspect" data-reason="{{ s.reason }}">
+        <div class="row">
+          <button type="button" class="mono link locate" data-word="{{ s.word }}">{{ s.word }}</button>
+          <span class="spacer"></span><span class="chip muted">{{ s.reason }}</span>
+        </div>
+        <div class="serif muted small ctx">…{{ s.context }}…</div>
+      </div>
+      {% endfor %}
+      {% if not suspects and not suggestions %}<p class="muted pad">Rien à signaler dans ce chapitre.</p>{% endif %}
+    </div>
+    {% if suggestions %}
+    <div class="row pad-sm">
+      <button type="button" class="btn sm" id="accept-all">Tout accepter ({{ suggestions|length }})</button>
+      <button type="button" class="btn sm ghost" id="dismiss-all">Tout ignorer</button>
+    </div>
+    {% endif %}
+    <p class="muted tiny pad-sm">Ce n'est pas un correcteur : les fautes d'OCR se devinent au sens. Ces formes méritent seulement un coup d'œil. Rien n'est enregistré avant « Enregistrer ».</p>
+  </aside>
+</div>
+{% endblock %}

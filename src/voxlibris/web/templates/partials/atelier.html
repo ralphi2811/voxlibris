@@ -1,0 +1,19 @@
+{% import "_icons.html" as icons %}
+<div class="atelier-head">
+  <span class="dot {% if atelier.online %}ok{% else %}bad{% endif %}"></span>
+  <strong>{% if atelier.online %}Atelier prêt{% else %}Atelier injoignable{% endif %}</strong>
+</div>
+{% if atelier.online %}
+<div class="atelier-line">
+  {{ icons.ic("gpu", 14) }}
+  {% if atelier.device == "cuda" %}{{ atelier.gpu }} · {{ atelier.vram_free_gb }} Go libres{% else %}processeur seul{% endif %}
+</div>
+{% if atelier.busy %}<div class="atelier-line accent">{{ icons.ic("clock", 14) }}tâche {{ atelier.busy }} en cours</div>{% endif %}
+<div class="chips">
+  {% for engine, ok in atelier.engines.items() %}
+  <span class="chip {% if ok %}ok{% else %}muted{% endif %}">{{ engine }}</span>
+  {% endfor %}
+</div>
+{% else %}
+<div class="atelier-line">Lancez « python -m voxlibris.worker », ou le service Compose.</div>
+{% endif %}
