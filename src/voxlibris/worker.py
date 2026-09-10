@@ -67,7 +67,7 @@ def track_is_current(track: Path, segments: Path) -> bool:
 
 def run_synth(project: Project, job: Job, queue: Queue) -> None:
     from .tts.backends import load
-    from .tts.synth import load_segments, profile_for_voice, synthesize_chapter
+    from .tts.synth import load_segments, previous_takes, profile_for_voice, synthesize_chapter
 
     backend = job.params.get("backend", "xtts")
     voice = job.params.get("voice")
@@ -124,7 +124,11 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
         if track_is_current(target, path) and not (force or changed):
             queue.report(job.id, (index + 1) / len(paths), f"{path.stem} déjà synthétisé")
             continue
+        reuse = None
         if target.exists() and not (force or changed):
+            # Même voix, même débit : ce qui n'a pas changé de texte est repris tel quel.
+            number = int(path.stem.removeprefix("ch"))
+            reuse = previous_takes(target, project.timing(number))
             queue.report(job.id, message=f"{path.stem} : segments plus récents que la piste")
         segments = load_segments(path)
         queue.report(
@@ -132,12 +136,13 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
             index / len(paths),
             f"{path.stem} — {segments[0].title} ({len(segments)} segments)",
         )
-        result = synthesize_chapter(engine, segments, profile, on_segment=check_cancel)
+        result = synthesize_chapter(engine, segments, profile, on_segment=check_cancel, reuse=reuse)
         result.write(target)
         warnings += result.warnings
-        queue.report(
-            job.id, (index + 1) / len(paths), f"{path.stem} → {result.duration / 60:.1f} min"
-        )
+        summary = f"{path.stem} → {result.duration / 60:.1f} min"
+        if result.reused:
+            summary += f", {result.reused} segments repris de la piste précédente"
+        queue.report(job.id, (index + 1) / len(paths), summary)
 
     if warnings:
         queue.report(job.id, message=f"{len(warnings)} segment(s) à vérifier :")

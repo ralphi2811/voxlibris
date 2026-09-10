@@ -341,15 +341,29 @@ class Project:
             )
         return rows
 
-    def flagged_segments(self) -> list[dict[str, object]]:
-        """Les segments que le contrôle qualité n'a pas su rendre propres, toutes pistes."""
+    def flagged_segments(self, context: int = 2) -> list[dict[str, object]]:
+        """Les segments que le contrôle qualité n'a pas su rendre propres, toutes pistes.
+
+        Chacun vient avec `before` et `after`, le texte des segments voisins : une phrase
+        isolée ne dit pas toujours ce qui cloche, le passage autour si.
+        """
         found = []
         for state in self.chapter_states():
             number = int(state["number"])
-            for entry in self.timing(number):
+            timing = self.timing(number)
+            for position, entry in enumerate(timing):
                 if entry.get("clean", True):
                     continue
-                found.append({"chapter": number, **entry})
+                before = timing[max(0, position - context) : position]
+                after = timing[position + 1 : position + 1 + context]
+                found.append(
+                    {
+                        "chapter": number,
+                        **entry,
+                        "before": " ".join(str(e.get("text", "")) for e in before),
+                        "after": " ".join(str(e.get("text", "")) for e in after),
+                    }
+                )
         return found
 
     def audio_seconds(self) -> float:

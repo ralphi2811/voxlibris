@@ -151,12 +151,13 @@ coup d'œil où en est chaque livre et ce qui reste à faire.
   rendue avec ses polices —, les formes suspectes filtrées par cause, les propositions
   du modèle acceptées ou écartées une à une, rechercher-remplacer.
 - **Préparation** : silences, annonce des chapitres, et les segments tels qu'ils partent
-  au moteur. Un chapitre dont le texte n'a pas changé garde sa piste.
+  au moteur. Un chapitre dont le texte n'a pas changé garde sa piste ; dans un chapitre
+  corrigé, seuls les segments dont le texte a changé repassent au moteur.
 - **Voix** : les moteurs avec leur licence et ce que l'atelier sait charger, un banc
   d'essai sur le même extrait, le coût du livre entier par moteur.
 - **Synthèse** : réglages, avancement segment par segment, bouton d'arrêt, et le tableau
-  des **segments à l'oreille** — instant, cause, écouter, corriger, rejouer. Rejouer un
-  segment le recolle dans sa piste sans refaire le chapitre.
+  des **segments à l'oreille** — instant, cause, le passage autour, écouter, corriger,
+  rejouer. Rejouer un segment le recolle dans sa piste sans refaire le chapitre.
 - **Assemblage** et **Journal** des tâches.
 - **Réglages** : modèle de langage, Voxtral, licence XTTS, matériel — enregistrés dans le
   dossier des données, partagés avec l'atelier, pris en compte sans redémarrage, avec un

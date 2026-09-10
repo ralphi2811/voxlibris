@@ -53,6 +53,10 @@ class ChapterResult:
     def duration(self) -> float:
         return len(self.audio) / SAMPLE_RATE
 
+    @property
+    def reused(self) -> int:
+        return sum(1 for entry in self.timing if entry.get("reused"))
+
     def write(self, target: Path) -> None:
         import soundfile as sf
 
@@ -63,13 +67,52 @@ class ChapterResult:
         )
 
 
+def previous_takes(track: Path, timing: list[dict]) -> Callable[[str], Take | None]:
+    """Les segments propres d'une piste déjà synthétisée, retrouvables par leur texte.
+
+    Un mot corrigé dans un chapitre ne doit pas coûter le chapitre entier : tout segment
+    dont le texte n'a pas bougé est repris tel quel de la piste précédente, découpé
+    d'après son manifeste. Les segments signalés ne sont pas repris — c'est l'occasion
+    de les rejouer. La piste n'est lue que si un segment est effectivement repris.
+    """
+    known = {
+        str(entry["text"]): entry
+        for entry in timing
+        if entry.get("clean", True) and entry.get("text") and entry["end"] > entry["start"]
+    }
+    audio: list[np.ndarray] = []
+
+    def lookup(text: str) -> Take | None:
+        entry = known.get(text)
+        if entry is None:
+            return None
+        if not audio:
+            import soundfile as sf
+
+            data, _ = sf.read(track, dtype="float32")
+            audio.append(data[:, 0] if data.ndim > 1 else data)
+        start = int(round(float(entry["start"]) * SAMPLE_RATE))
+        end = int(round(float(entry["end"]) * SAMPLE_RATE))
+        piece = audio[0][start:end]
+        if not len(piece):
+            return None
+        return Take(np.array(piece, np.float32), True, int(entry.get("attempts", 1)))
+
+    return lookup
+
+
 def synthesize_chapter(
     backend: Backend,
     segments: Iterable[Segment],
     profile: QualityProfile | None = None,
     on_segment: Callable[[Segment, float, int], None] = lambda *_: None,
+    reuse: Callable[[str], Take | None] | None = None,
 ) -> ChapterResult:
-    """Synthétise et concatène un chapitre, en signalant les segments douteux."""
+    """Synthétise et concatène un chapitre, en signalant les segments douteux.
+
+    `reuse` propose, pour un texte, une prise déjà faite : elle est alors reprise sans
+    passer par le moteur — voir `previous_takes`.
+    """
     profile = profile or QualityProfile()
     pieces: list[np.ndarray] = []
     timing: list[dict] = []
@@ -77,8 +120,12 @@ def synthesize_chapter(
     cursor = 0
 
     for segment in segments:
+        reused = reuse(segment.text) if reuse else None
         try:
-            take, split = render_with_fallback(backend.say, segment.text, profile)
+            if reused is not None:
+                take, split = reused, False
+            else:
+                take, split = render_with_fallback(backend.say, segment.text, profile)
         except Refused as refus:
             # Un moteur distant peut refuser une phrase, et il refusera les mêmes à
             # chaque tentative. Abandonner tout le livre pour autant serait absurde :
@@ -109,6 +156,8 @@ def synthesize_chapter(
                 "cause": "" if take.clean else take.cause,
                 "split": split,
                 "text": segment.text,
+                # Repris de la piste précédente, sans passer par le moteur.
+                "reused": reused is not None,
             }
         )
         cursor += len(take.audio) + len(pause)

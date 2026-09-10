@@ -57,7 +57,7 @@
         <tr>
           <td class="mono muted">{{ "%02d"|format(f.chapter) }}·{{ f.idx }}</td>
           <td class="mono">{{ f.start|clock }}</td>
-          <td class="ellipsis serif" title="{{ f.text }}">{{ f.text }}</td>
+          <td class="serif"><button class="linkish ellipsis context-toggle" type="button" title="voir le passage">{{ f.text }}</button></td>
           <td><span class="chip warn">{{ f.cause or "à vérifier" }}</span></td>
           <td class="mono muted">{{ f.attempts }}{% if f.split %} · découpé{% endif %}</td>
           <td>
@@ -66,6 +66,12 @@
               <a class="btn sm" href="/projects/{{ name }}/review/{{ f.chapter }}?find={{ f.text[:40]|urlencode }}">{{ icons.ic("edit", 14) }}Corriger</a>
               <form method="post" action="/projects/{{ name }}/jobs/resynth"><input type="hidden" name="chapter" value="{{ f.chapter }}"><input type="hidden" name="idx" value="{{ f.idx }}"><button class="btn sm" type="submit" {% if job %}disabled{% endif %}>{{ icons.ic("refresh", 14) }}Rejouer</button></form>
             </div>
+          </td>
+        </tr>
+        <tr class="context" hidden>
+          <td colspan="6">
+            <p class="passage serif">{% if f.before %}<span class="muted">{{ f.before }}</span> {% endif %}<mark>{{ f.text }}</mark>{% if f.after %} <span class="muted">{{ f.after }}</span>{% endif %}</p>
+            <p class="muted small">{{ icons.ic("edit", 12) }}Corriger ouvre le texte relu à ce passage ; à la prochaine synthèse, seuls les segments dont le texte a changé sont refaits.</p>
           </td>
         </tr>
         {% endfor %}

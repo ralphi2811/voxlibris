@@ -197,6 +197,8 @@ class TestPistes:
 
         flagged = project.flagged_segments()
         assert [(f["chapter"], f["idx"], f["cause"]) for f in flagged] == [(1, 1, "trop court")]
+        # Le passage autour : les voisins du manifeste.
+        assert flagged[0]["before"] == "a" and flagged[0]["after"] == ""
         assert project.audio_seconds() == 3.0
 
 
@@ -266,3 +268,83 @@ class TestRejeu:
         after = project.timing(1)
         assert after[1]["start"] == 1.0 and after[1]["end"] == pytest.approx(3.0, abs=0.05)
         assert after[2]["start"] == pytest.approx(3.0, abs=0.05)
+
+
+class TestReprise:
+    def test_les_segments_inchanges_sont_repris_de_la_piste(self, tmp_path, monkeypatch):
+        """Un mot corrigé ne coûte pas le chapitre : seul son segment repasse au moteur."""
+        import os
+
+        import soundfile as sf
+
+        from voxlibris import worker
+        from voxlibris.tts.quality import SAMPLE_RATE
+        from voxlibris.web.jobs import Queue
+
+        project = make_project(tmp_path / "p")
+        project.backend, project.voice = "faux", "voix"
+        project.save()
+        project.wav_dir.mkdir(parents=True)
+        texts = ["Un deux trois.", "Quatre cinq six sept.", "Huit neuf."]
+        audio = np.concatenate([np.full(SAMPLE_RATE, v, np.float32) for v in (0.1, 0.2, 0.3)])
+        sf.write(project.wav_dir / "ch01.wav", audio, SAMPLE_RATE)
+        timing = [
+            {
+                "idx": i,
+                "start": float(i),
+                "end": float(i + 1),
+                "clean": True,
+                "attempts": 1,
+                "cause": "",
+                "split": False,
+                "text": t,
+            }
+            for i, t in enumerate(texts)
+        ]
+        (project.wav_dir / "ch01.timing.json").write_text(json.dumps(timing), encoding="utf-8")
+
+        # Le texte du deuxième segment change ; les segments datent d'après la piste.
+        texts[1] = "Quatre cinq six."
+        project.segments_dir.mkdir(parents=True)
+        segments = project.segments_dir / "ch01.jsonl"
+        segments.write_text(
+            "\n".join(
+                json.dumps({"idx": i, "text": t, "pause_after_ms": 0, "chapter": 1, "title": "Un"})
+                for i, t in enumerate(texts)
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        later = (project.wav_dir / "ch01.wav").stat().st_mtime + 10
+        os.utime(segments, (later, later))
+
+        class FakeEngine:
+            name, voice, speed, sample_rate = "faux", "voix", 1.0, SAMPLE_RATE
+            supports_speed = True
+            said: list[str] = []
+
+            def say(self, text):
+                self.said.append(text)
+                return np.full(2 * SAMPLE_RATE, 0.9, np.float32)
+
+        monkeypatch.setattr("voxlibris.tts.backends.load", lambda *a, **k: FakeEngine())
+        monkeypatch.setattr(
+            "voxlibris.tts.synth.profile_for_voice",
+            lambda *a, **k: __import__(
+                "voxlibris.tts.quality", fromlist=["QualityProfile"]
+            ).QualityProfile(chars_per_second=10),
+        )
+        queue = Queue(tmp_path / "jobs.sqlite")
+        job = queue.enqueue("p", "synth", backend="faux")
+        worker.run_synth(project, job, queue)
+
+        assert FakeEngine.said == ["Quatre cinq six."]
+        rebuilt, _ = sf.read(project.wav_dir / "ch01.wav", dtype="float32")
+        assert len(rebuilt) == 4 * SAMPLE_RATE
+        assert rebuilt[SAMPLE_RATE // 2] == pytest.approx(0.1, abs=1e-3)
+        assert rebuilt[SAMPLE_RATE + 10] == pytest.approx(0.9, abs=1e-3)
+        assert rebuilt[3 * SAMPLE_RATE + 10] == pytest.approx(0.3, abs=1e-3)
+        after = project.timing(1)
+        assert [e["reused"] for e in after] == [True, False, True]
+        assert after[2]["start"] == pytest.approx(3.0, abs=0.05)
+        assert "2 segments repris" in queue.get(job.id).log

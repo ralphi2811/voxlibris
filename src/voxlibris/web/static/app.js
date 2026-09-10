@@ -335,6 +335,13 @@
     document.querySelectorAll("input[type=file][data-submit]").forEach(submitOnPick);
     document.querySelectorAll(".inline-edit").forEach(inlineEdit);
     document.querySelectorAll(".listen").forEach(listen);
+    // Le passage autour d'un segment signalé se déplie sous sa ligne.
+    document.querySelectorAll(".context-toggle").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var row = button.closest("tr").nextElementSibling;
+        if (row && row.classList.contains("context")) row.hidden = !row.hidden;
+      });
+    });
     document.querySelectorAll("[data-test]").forEach(tester);
     var filter = document.getElementById("filter"); if (filter) libraryFilter(filter);
     var drop = document.getElementById("drop"); if (drop) dropzone(drop);
