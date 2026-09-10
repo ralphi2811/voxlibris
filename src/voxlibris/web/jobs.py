@@ -225,12 +225,34 @@ class Queue:
                 )
 
     def cancel_stale(self, older_than: float = 6 * 3600) -> int:
-        """Marque en échec les tâches restées en cours après un arrêt brutal."""
+        """Marque les tâches restées en cours après un arrêt brutal.
+
+        Une tâche dont l'arrêt avait été demandé est simplement arrêtée ; les autres
+        sont en échec, avec le motif, pour qu'on sache qu'il faut les relancer.
+        """
         cutoff = time.time() - older_than
         with self._connect() as db:
+            db.execute(
+                "UPDATE jobs SET state = ?, message = ?, finished = ? "
+                "WHERE state = ? AND cancel = 1 AND started <= ?",
+                (
+                    State.CANCELLED,
+                    "arrêtée : atelier redémarré",
+                    time.time(),
+                    State.RUNNING,
+                    cutoff,
+                ),
+            )
             cursor = db.execute(
-                "UPDATE jobs SET state = ?, message = ? WHERE state = ? AND started < ?",
-                (State.FAILED, "interrompue", State.RUNNING, cutoff),
+                "UPDATE jobs SET state = ?, message = ?, finished = ? "
+                "WHERE state = ? AND started <= ?",
+                (
+                    State.FAILED,
+                    "interrompue : atelier redémarré",
+                    time.time(),
+                    State.RUNNING,
+                    cutoff,
+                ),
             )
             return cursor.rowcount
 

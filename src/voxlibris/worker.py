@@ -379,8 +379,9 @@ def main() -> None:
 
     root = workspace()
     queue = default_queue()
-    # Un arrêt brutal laisse des tâches marquées « en cours » qui ne le sont plus.
-    if stale := queue.cancel_stale():
+    # Un seul atelier tourne à la fois : au démarrage, toute tâche encore marquée
+    # « en cours » a été interrompue par l'arrêt précédent, quel que soit son âge.
+    if stale := queue.cancel_stale(older_than=0):
         logger.info("%d tâche(s) interrompue(s) remise(s) à plat", stale)
     pulse = atelier.Pulse(root)
     pulse.start()

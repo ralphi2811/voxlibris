@@ -82,6 +82,20 @@ class TestArret:
         assert "arrêtée" in done.message
         assert "Traceback" not in done.log
 
+    def test_au_redemarrage_les_taches_en_cours_sont_remises_a_plat(self, tmp_path):
+        """L'atelier qui redémarre est seul : ce qui est « en cours » ne l'est plus."""
+        queue = Queue(tmp_path / "jobs.sqlite")
+        stopped = queue.enqueue("livre", "proofread")
+        crashed = queue.enqueue("livre", "synth")
+        queue.claim()
+        queue.claim()
+        queue.request_cancel(stopped.id)
+        assert queue.cancel_stale(older_than=0) == 1
+        assert queue.get(stopped.id).state is State.CANCELLED
+        assert queue.get(crashed.id).state is State.FAILED
+        assert "redémarré" in queue.get(crashed.id).message
+        assert queue.active("livre") is None
+
     def test_une_base_ancienne_recoit_la_colonne(self, tmp_path):
         """Une base créée avant l'arrêt à la demande doit continuer de fonctionner."""
         import sqlite3
