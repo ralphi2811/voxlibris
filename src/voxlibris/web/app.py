@@ -708,11 +708,16 @@ def choose_voice(name: str, backend: str = Form(...), voice: str = Form("")):
 def synth_page(request: Request, name: str, chapter: int = 0, cause: str = ""):
     project = load_project(name)
     flagged = project.flagged_segments()
+    approved = project.approved_segments()
     causes = sorted({str(f.get("cause") or "") for f in flagged} - {""})
+    if approved:
+        causes.append(APPROVED)
+    if cause == APPROVED:
+        flagged = approved
+    elif cause:
+        flagged = [f for f in flagged if f.get("cause") == cause]
     if chapter:
         flagged = [f for f in flagged if f["chapter"] == chapter]
-    if cause:
-        flagged = [f for f in flagged if f.get("cause") == cause]
     return shell(
         request,
         "project/synth.html",
@@ -723,6 +728,8 @@ def synth_page(request: Request, name: str, chapter: int = 0, cause: str = ""):
         causes=causes,
         filter_chapter=chapter,
         filter_cause=cause,
+        approved_count=len(approved),
+        approved_label=APPROVED,
         status=project.status(),
         engines=ENGINES,
         catalogues=catalogues(project.language),
@@ -731,6 +738,26 @@ def synth_page(request: Request, name: str, chapter: int = 0, cause: str = ""):
         voxtral_local=voxtral_is_local(),
         jobs=queue.list(name, limit=6),
     )
+
+
+# Pseudo-cause du filtre : montrer les segments validés, pour revenir dessus.
+APPROVED = "validé"
+
+
+@app.post("/projects/{name}/segments/approve")
+def approve_segment(
+    name: str,
+    chapter: int = Form(...),
+    idx: int = Form(...),
+    undo: str = Form(""),
+    back: str = Form(""),
+):
+    """Valide un segment à l'oreille, ou annule cette validation."""
+    project = load_project(name)
+    if not project.approve_segment(chapter, idx, approved=not undo):
+        raise HTTPException(404, "Segment introuvable")
+    target = back if back.startswith(f"/projects/{name}/synth") else f"/projects/{name}/synth"
+    return RedirectResponse(target, status_code=303)
 
 
 # --- Assemblage ---------------------------------------------------------------------

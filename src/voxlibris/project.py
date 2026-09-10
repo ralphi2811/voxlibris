@@ -341,6 +341,34 @@ class Project:
             )
         return rows
 
+    def approve_segment(self, number: int, idx: int, approved: bool = True) -> bool:
+        """Déclare un segment signalé bon à l'oreille — ou le remet en question.
+
+        Le contrôle qualité juge sur des durées ; l'oreille tranche. Un segment validé sort
+        de la liste à écouter et sera repris tel quel à la prochaine synthèse, au lieu
+        d'être rejoué. Sa cause d'origine est conservée, pour savoir d'où il vient.
+        """
+        path = self.wav_dir / f"ch{number:02d}.timing.json"
+        timing = self.timing(number)
+        entry = next((e for e in timing if e.get("idx") == idx), None)
+        if entry is None:
+            return False
+        if approved:
+            entry["clean"], entry["approved"] = True, True
+        elif entry.get("approved"):
+            entry["clean"], entry["approved"] = False, False
+        path.write_text(json.dumps(timing, ensure_ascii=False, indent=1), encoding="utf-8")
+        return True
+
+    def approved_segments(self) -> list[dict[str, object]]:
+        """Les segments validés à l'oreille, pour pouvoir revenir dessus."""
+        return [
+            {"chapter": int(state["number"]), **entry}
+            for state in self.chapter_states()
+            for entry in self.timing(int(state["number"]))
+            if entry.get("approved")
+        ]
+
     def flagged_segments(self, context: int = 2) -> list[dict[str, object]]:
         """Les segments que le contrôle qualité n'a pas su rendre propres, toutes pistes.
 

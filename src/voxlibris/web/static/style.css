@@ -245,3 +245,5 @@ mark { background: var(--warn-soft); color: var(--warn); padding: 0 2px; border-
 tr.context td { background: var(--surface2); padding: 12px 20px; }
 tr.context .passage { margin: 0 0 8px; font-size: 15px; line-height: 1.55; max-width: 72ch; }
 tr.context mark { background: var(--warn-soft); color: var(--ink); padding: 0 3px; border-radius: 3px; }
+
+.w300 { width: 300px; }

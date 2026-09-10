@@ -331,6 +331,7 @@ def run_resynth(project: Project, job: Job, queue: Queue) -> None:
         clean=fresh["clean"],
         cause=fresh.get("cause", ""),
         split=fresh["split"],
+        approved=False,
     )
     for later in timing[position + 1 :]:
         later["start"] = round(float(later["start"]) + delta, 2)

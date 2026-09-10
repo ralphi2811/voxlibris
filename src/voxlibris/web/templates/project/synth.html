@@ -42,7 +42,8 @@
     <div class="card" id="flagged">
       <div class="card-head">
         <strong>Segments à l'oreille</strong>
-        <span class="chip {% if flagged %}warn{% else %}ok{% endif %}">{{ flagged|length }} signalé{{ "s" if flagged|length != 1 }}</span>
+        <span class="chip {% if flagged and filter_cause != approved_label %}warn{% else %}ok{% endif %}">{{ flagged|length }} {% if filter_cause == approved_label %}validé{% else %}signalé{% endif %}{{ "s" if flagged|length != 1 }}</span>
+        {% if approved_count and filter_cause != approved_label %}<a class="chip muted" href="/projects/{{ name }}/synth?cause={{ approved_label }}#flagged" title="revoir les segments validés">{{ approved_count }} validé{{ "s" if approved_count != 1 }}</a>{% endif %}
         <span class="spacer"></span>
         <form method="get" action="/projects/{{ name }}/synth" class="row" data-autosubmit>
           <select class="input sm" name="chapter"><option value="0">Tous les chapitres</option>{% for t in tracks %}<option value="{{ t.number }}" {% if filter_chapter == t.number %}selected{% endif %}>{{ "%02d"|format(t.number) }} · {{ t.title|truncate(28) }}</option>{% endfor %}</select>
@@ -51,27 +52,31 @@
       </div>
       {% if flagged %}
       <table class="flagged">
-        <thead><tr><th class="w60">Seg.</th><th class="w70">Instant</th><th>Texte</th><th class="w110">Cause</th><th class="w90">Essais</th><th class="w230"></th></tr></thead>
+        <thead><tr><th class="w60">Seg.</th><th class="w70">Instant</th><th>Texte</th><th class="w110">Cause</th><th class="w90">Essais</th><th class="w300"></th></tr></thead>
         <tbody>
         {% for f in flagged %}
         <tr>
           <td class="mono muted">{{ "%02d"|format(f.chapter) }}·{{ f.idx }}</td>
           <td class="mono">{{ f.start|clock }}</td>
           <td class="serif"><button class="linkish ellipsis context-toggle" type="button" title="voir le passage">{{ f.text }}</button></td>
-          <td><span class="chip warn">{{ f.cause or "à vérifier" }}</span></td>
+          <td>{% if f.approved %}<span class="chip ok">{{ icons.ic("check", 12) }}{{ f.cause or "validé" }}</span>{% else %}<span class="chip warn">{{ f.cause or "à vérifier" }}</span>{% endif %}</td>
           <td class="mono muted">{{ f.attempts }}{% if f.split %} · découpé{% endif %}</td>
           <td>
             <div class="row end">
               <button class="btn sm listen" type="button" data-src="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(f.chapter) }}.wav" data-start="{{ f.start }}" data-end="{{ f.end }}" data-label="Piste {{ '%02d'|format(f.chapter) }} · segment {{ f.idx }} · {{ f.start|clock }}">{{ icons.ic("play", 14) }}Écouter</button>
               <a class="btn sm" href="/projects/{{ name }}/review/{{ f.chapter }}?find={{ f.text[:40]|urlencode }}">{{ icons.ic("edit", 14) }}Corriger</a>
               <form method="post" action="/projects/{{ name }}/jobs/resynth"><input type="hidden" name="chapter" value="{{ f.chapter }}"><input type="hidden" name="idx" value="{{ f.idx }}"><button class="btn sm" type="submit" {% if job %}disabled{% endif %}>{{ icons.ic("refresh", 14) }}Rejouer</button></form>
+              <form method="post" action="/projects/{{ name }}/segments/approve"><input type="hidden" name="chapter" value="{{ f.chapter }}"><input type="hidden" name="idx" value="{{ f.idx }}"><input type="hidden" name="back" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}#flagged">
+                {% if f.approved %}<input type="hidden" name="undo" value="1"><button class="btn sm ghost" type="submit" title="remettre ce segment dans la liste à écouter">{{ icons.ic("refresh", 14) }}Rétablir</button>
+                {% else %}<button class="btn sm ghost" type="submit" title="bon à l'oreille : le garder tel quel">{{ icons.ic("check", 14) }}Valider</button>{% endif %}
+              </form>
             </div>
           </td>
         </tr>
         <tr class="context" hidden>
           <td colspan="6">
             <p class="passage serif">{% if f.before %}<span class="muted">{{ f.before }}</span> {% endif %}<mark>{{ f.text }}</mark>{% if f.after %} <span class="muted">{{ f.after }}</span>{% endif %}</p>
-            <p class="muted small">{{ icons.ic("edit", 12) }}Corriger ouvre le texte relu à ce passage ; à la prochaine synthèse, seuls les segments dont le texte a changé sont refaits.</p>
+            <p class="muted small">{{ icons.ic("edit", 12) }}Corriger ouvre le texte relu à ce passage ; à la prochaine synthèse, seuls les segments dont le texte a changé sont refaits. Valider garde ce segment tel quel.</p>
           </td>
         </tr>
         {% endfor %}

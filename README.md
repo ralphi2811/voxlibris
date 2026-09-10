@@ -157,7 +157,8 @@ coup d'œil où en est chaque livre et ce qui reste à faire.
   d'essai sur le même extrait, le coût du livre entier par moteur.
 - **Synthèse** : réglages, avancement segment par segment, bouton d'arrêt, et le tableau
   des **segments à l'oreille** — instant, cause, le passage autour, écouter, corriger,
-  rejouer. Rejouer un segment le recolle dans sa piste sans refaire le chapitre.
+  rejouer, valider. Rejouer un segment le recolle dans sa piste sans refaire le
+  chapitre ; le valider le garde tel quel, l'oreille ayant le dernier mot.
 - **Assemblage** et **Journal** des tâches.
 - **Réglages** : modèle de langage, Voxtral, licence XTTS, matériel — enregistrés dans le
   dossier des données, partagés avec l'atelier, pris en compte sans redémarrage, avec un

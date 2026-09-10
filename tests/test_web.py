@@ -311,6 +311,49 @@ class TestFichiers:
         assert 'id="player-bar"' in response.text
 
 
+class TestValidation:
+    def test_un_segment_valide_sort_de_la_liste(self, client, make_epub):
+        import json
+
+        from voxlibris.web.app import project_dir
+
+        name = TestRelecture._create(None, client, make_epub)
+        wav = project_dir(name) / "out" / "wav"
+        wav.mkdir(parents=True)
+        (wav / "ch01.wav").write_bytes(b"RIFF" + b"\0" * 60)
+        entry = {
+            "idx": 0,
+            "start": 0.0,
+            "end": 1.0,
+            "clean": False,
+            "cause": "babil",
+            "attempts": 3,
+            "split": False,
+            "text": "Le gardien du phare.",
+        }
+        (wav / "ch01.timing.json").write_text(json.dumps([entry]), encoding="utf-8")
+
+        page = client.get(f"/projects/{name}/synth").text
+        assert "1 signalé" in page and "Valider" in page
+
+        response = client.post(
+            f"/projects/{name}/segments/approve",
+            data={"chapter": 1, "idx": 0, "back": f"/projects/{name}/synth?chapter=1#flagged"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == f"/projects/{name}/synth?chapter=1#flagged"
+        page = client.get(f"/projects/{name}/synth").text
+        assert "0 signalé" in page and "1 validé" in page
+        page = client.get(f"/projects/{name}/synth?cause=validé").text
+        assert "Rétablir" in page and "babil" in page
+
+        client.post(
+            f"/projects/{name}/segments/approve", data={"chapter": 1, "idx": 0, "undo": "1"}
+        )
+        assert "1 signalé" in client.get(f"/projects/{name}/synth").text
+
+
 class TestPagesDOrigine:
     """Un EPUB paginé montre ses pages en regard du texte, dans un cadre isolé."""
 

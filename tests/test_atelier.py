@@ -199,6 +199,16 @@ class TestPistes:
         assert [(f["chapter"], f["idx"], f["cause"]) for f in flagged] == [(1, 1, "trop court")]
         # Le passage autour : les voisins du manifeste.
         assert flagged[0]["before"] == "a" and flagged[0]["after"] == ""
+
+        # Validé à l'oreille : il sort de la liste, garde sa cause, et peut y revenir.
+        assert project.approve_segment(1, 1)
+        assert project.flagged_segments() == []
+        assert project.tracks()[0]["flagged"] == 0
+        approved = project.approved_segments()
+        assert [(a["idx"], a["cause"], a["clean"]) for a in approved] == [(1, "trop court", True)]
+        assert project.approve_segment(1, 1, approved=False)
+        assert [f["idx"] for f in project.flagged_segments()] == [1]
+        assert not project.approve_segment(1, 9)
         assert project.audio_seconds() == 3.0
 
 
