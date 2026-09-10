@@ -151,3 +151,33 @@ class TestSilences:
         assert [r["pause_after_ms"] for r in etire] == [
             int(round(r["pause_after_ms"] * 1.5)) for r in simple
         ]
+
+
+class TestReecriture:
+    def test_un_contenu_identique_garde_sa_date(self, tmp_path):
+        """La date du fichier de segments signale un vrai changement, pas un simple passage."""
+        import os
+        import time
+
+        from voxlibris.normalize import build_segments
+
+        text_dir, out_dir = tmp_path / "text", tmp_path / "segments"
+        text_dir.mkdir()
+        (text_dir / "ch01.md").write_text(
+            "---\nchapter: 1\ntitle: Un\n---\n\nIl faisait beau ce matin-là.\n",
+            encoding="utf-8",
+        )
+        build_segments(text_dir, out_dir)
+        target = out_dir / "ch01.jsonl"
+        ancien = time.time() - 3600
+        os.utime(target, (ancien, ancien))
+
+        build_segments(text_dir, out_dir)
+        assert abs(target.stat().st_mtime - ancien) < 1
+
+        (text_dir / "ch01.md").write_text(
+            "---\nchapter: 1\ntitle: Un\n---\n\nIl pleuvait ce matin-là.\n",
+            encoding="utf-8",
+        )
+        build_segments(text_dir, out_dir)
+        assert target.stat().st_mtime > ancien + 1

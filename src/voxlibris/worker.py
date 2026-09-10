@@ -47,6 +47,16 @@ def run_normalize(project: Project, job: Job, queue: Queue) -> None:
     )
 
 
+def track_is_current(track: Path, segments: Path) -> bool:
+    """Vrai si la piste existe et date d'après ses segments.
+
+    Cas vécu : un passage corrigé dans le texte, les segments repréparés, et la synthèse
+    qui répond « déjà synthétisé » en gardant la piste d'avant — la correction n'a jamais
+    atteint l'audio. La date des segments ne bouge que quand leur contenu change.
+    """
+    return track.exists() and track.stat().st_mtime >= segments.stat().st_mtime
+
+
 def run_synth(project: Project, job: Job, queue: Queue) -> None:
     from .tts.backends import load
     from .tts.synth import load_segments, profile_for_voice, synthesize_chapter
@@ -96,9 +106,11 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     warnings: list[str] = []
     for index, path in enumerate(paths):
         target = project.wav_dir / f"{path.stem}.wav"
-        if target.exists() and not (force or changed):
+        if track_is_current(target, path) and not (force or changed):
             queue.report(job.id, (index + 1) / len(paths), f"{path.stem} déjà synthétisé")
             continue
+        if target.exists() and not (force or changed):
+            queue.report(job.id, message=f"{path.stem} : segments plus récents que la piste")
         segments = load_segments(path)
         queue.report(
             job.id,

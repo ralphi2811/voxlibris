@@ -287,10 +287,11 @@ def build_segments(
             chapter, meta["title"], paragraphs, announce_chapters, pause_scale
         )
         target = out_dir / f"ch{chapter:02d}.jsonl"
-        target.write_text(
-            "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n",
-            encoding="utf-8",
-        )
+        content = "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n"
+        # Un fichier identique n'est pas réécrit : sa date reste celle du dernier vrai
+        # changement, et c'est elle qui dira à la synthèse si la piste est à refaire.
+        if not target.exists() or target.read_text(encoding="utf-8") != content:
+            target.write_text(content, encoding="utf-8")
         counts[chapter] = len(records)
     return counts
 

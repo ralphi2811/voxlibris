@@ -259,3 +259,22 @@ class TestVoxtralLocal:
         assert app_module.voxtral_is_local()
         monkeypatch.setenv("VOXLIBRIS_MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
         assert not app_module.voxtral_is_local()
+
+
+class TestPisteAJour:
+    def test_des_segments_plus_recents_forcent_la_synthese(self, tmp_path):
+        import os
+
+        from voxlibris.worker import track_is_current
+
+        segments, track = tmp_path / "ch01.jsonl", tmp_path / "ch01.wav"
+        segments.write_text("{}\n")
+        assert not track_is_current(track, segments)
+
+        track.write_bytes(b"RIFF")
+        assert track_is_current(track, segments)
+
+        # Le texte est corrigé et les segments repréparés après la piste.
+        plus_tard = track.stat().st_mtime + 60
+        os.utime(segments, (plus_tard, plus_tard))
+        assert not track_is_current(track, segments)
