@@ -33,6 +33,7 @@ EDITABLE = (
     "VOXLIBRIS_LLM_REASONING",
     "VOXLIBRIS_MISTRAL_API_KEY",
     "VOXLIBRIS_MISTRAL_BASE_URL",
+    "VOXLIBRIS_ZONOS2_BASE_URL",
     "COQUI_TOS_AGREED",
     "VOXLIBRIS_DEVICE",
 )
@@ -48,6 +49,11 @@ def data_dir() -> Path:
 
 def settings_file() -> Path:
     return data_dir() / "settings.json"
+
+
+def voices_dir() -> Path:
+    """Dossier des extraits de voix à cloner. Le serveur ZONOS2 le lit tel quel."""
+    return data_dir() / "voices"
 
 
 def load_env() -> None:

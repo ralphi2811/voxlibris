@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import atelier, pages
-from ..config import EDITABLE, SECRETS, origin, setting, write_settings
+from ..config import EDITABLE, SECRETS, origin, setting, voices_dir, write_settings
 from ..document import Chapter
 from ..ingest import ingest as ingest_book
 from ..project import Project
@@ -70,6 +70,13 @@ ENGINES = {
         "licence": "CC BY-NC 4.0",
         "licence_tone": "warn",
         "where": "API ou GPU · 16 Go",
+    },
+    "zonos2": {
+        "label": "ZONOS2",
+        "blurb": "Clone une voix d'un simple extrait. Chez vous, quarante langues.",
+        "licence": "Apache 2.0",
+        "licence_tone": "ok",
+        "where": "GPU · 24 Go",
     },
 }
 
@@ -159,7 +166,8 @@ def catalogues(language: str = "") -> dict[str, list[str]]:
     XTTS n'en fournit aucune : ses locuteurs ne se lisent qu'une fois les huit
     gigaoctets en mémoire, ce que l'interface n'a pas à faire — d'où les suggestions
     fixes. Voxtral tient son catalogue derrière une simple requête ; on la mémorise, car
-    elle serait sinon refaite à chaque affichage de page.
+    elle serait sinon refaite à chaque affichage de page. ZONOS2 aussi, mais sans
+    mémoire : ses voix sont les fichiers d'un dossier, qui change sous nos yeux.
 
     Une absence de clé ou un service en panne ne laissent qu'une liste vide : on retombe
     alors sur la saisie libre, plutôt que d'empêcher l'affichage du projet.
@@ -174,7 +182,37 @@ def catalogues(language: str = "") -> dict[str, list[str]]:
         except Exception:
             _voxtral_cache[language] = []
     known["voxtral"] = _voxtral_cache[language]
+    known["zonos2"] = zonos2_voices()
     return known
+
+
+def zonos2_voices() -> list[str]:
+    """Les voix que voit le serveur ZONOS2 — rien, s'il n'est pas configuré ou absent."""
+    from ..tts.zonos2 import base_url, voice_names
+
+    if not base_url():
+        return []
+    try:
+        return voice_names()
+    except Exception:
+        return []
+
+
+def voice_samples() -> list[dict[str, str]]:
+    """Les extraits déposés pour le clonage, tels que le serveur les nommera."""
+    from ..tts.zonos2 import AUDIO_EXTENSIONS
+
+    folder = voices_dir()
+    if not folder.is_dir():
+        return []
+    return [
+        {
+            "file": path.name,
+            "label": path.stem.replace("_", " ").replace("-", " ").strip() or path.name,
+        }
+        for path in sorted(folder.iterdir())
+        if path.is_file() and path.suffix.lower() in AUDIO_EXTENSIONS
+    ]
 
 
 def voxtral_is_local() -> bool:
@@ -693,7 +731,7 @@ def prepare_page(request: Request, name: str):
 
 # --- Voix ---------------------------------------------------------------------------
 @app.get("/projects/{name}/voices", response_class=HTMLResponse)
-def voices_page(request: Request, name: str):
+def voices_page(request: Request, name: str, cloning: str = ""):
     project = load_project(name)
     available = atelier.status(workspace()).get("engines") or {}
     return shell(
@@ -707,9 +745,46 @@ def voices_page(request: Request, name: str):
         candidates=sample_candidates(project.language),
         samples=samples_of(project),
         voxtral_local=voxtral_is_local(),
+        voice_samples=voice_samples(),
+        cloning=cloning,
         status=project.status(),
         characters=sum(len(t) for t in project.chapter_texts().values()),
     )
+
+
+@app.post("/projects/{name}/voices/clone")
+async def upload_voice(name: str, file: UploadFile, label: str = Form("")):
+    """Dépose un extrait de voix à cloner. Le fichier est la voix : son nom, l'intitulé.
+
+    Le serveur ZONOS2 relit le dossier à chaque liste : rien à relancer. L'extrait n'est
+    lié à aucun projet — une voix sert à tous les livres.
+    """
+    from ..tts.zonos2 import AUDIO_EXTENSIONS
+
+    load_project(name)
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in AUDIO_EXTENSIONS:
+        raise HTTPException(400, "Extrait de voix : " + ", ".join(AUDIO_EXTENSIONS) + ".")
+    stem = slug(label or Path(file.filename or "").stem)
+    if stem == "livre":
+        raise HTTPException(400, "Donnez un nom à la voix.")
+    folder = voices_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    for old in folder.glob(f"{stem}.*"):
+        old.unlink()
+    with (folder / f"{stem}{suffix}").open("wb") as target:
+        shutil.copyfileobj(file.file, target)
+    return RedirectResponse(f"/projects/{name}/voices?cloning=deposee", status_code=303)
+
+
+@app.post("/projects/{name}/voices/clone/delete")
+def delete_voice(name: str, file: str = Form(...)):
+    """Retire un extrait : la voix disparaît du serveur à sa prochaine liste."""
+    load_project(name)
+    target = voices_dir() / Path(file).name
+    if target.is_file():
+        target.unlink()
+    return RedirectResponse(f"/projects/{name}/voices", status_code=303)
 
 
 @app.post("/projects/{name}/voice")
@@ -1000,6 +1075,17 @@ def test_service(request: Request, service: str):
             voices = client.voices()
             ok = True
             text = f"{'serveur local' if client.is_local else 'API Mistral'} · {len(voices)} voix"
+        except Exception as error:
+            ok, text = False, str(error)
+    elif service == "zonos2":
+        from ..tts.zonos2 import Client
+
+        try:
+            client = Client()
+            client.probe()
+            voices = client.speakers()
+            ok = True
+            text = f"serveur local · {len(voices)} voix"
         except Exception as error:
             ok, text = False, str(error)
     else:

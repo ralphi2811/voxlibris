@@ -36,6 +36,12 @@
   </section>
 
   <section class="card pad stack">
+    <div class="row"><strong>ZONOS2</strong><span class="spacer"></span><span class="verdict" id="verdict-zonos2"></span><button class="btn sm" type="button" data-test="zonos2">{{ icons.ic("refresh", 14) }}Tester</button></div>
+    {{ field("VOXLIBRIS_ZONOS2_BASE_URL", "Adresse du serveur", "http://zonos2:1919 — le service Compose sous « --profile zonos2 »") }}
+    <span class="muted small">Le seul moteur qui clone une voix : un extrait déposé depuis la page Voix suffit. Poids Apache 2.0, tout reste sur la machine.</span>
+  </section>
+
+  <section class="card pad stack">
     <strong>Moteurs et matériel</strong>
     <input type="hidden" name="COQUI_TOS_AGREED__present" value="1">
     <label class="toggle-row"><input type="checkbox" name="COQUI_TOS_AGREED" {% if settings["COQUI_TOS_AGREED"].value == "1" %}checked{% endif %}><span class="toggle"></span>

@@ -25,18 +25,31 @@ def heartbeat_file(root: Path) -> Path:
     return root / "atelier.json"
 
 
-def engines() -> dict[str, bool]:
-    """Les moteurs que cet atelier peut charger, sans les charger."""
-    from .tts.voxtral import api_key, base_url
-
+def installed() -> dict[str, bool]:
+    """Les moteurs embarqués dans cet atelier, sans les charger. Ne change pas en route."""
     return {
         "xtts": importlib.util.find_spec("TTS") is not None,
         "kokoro": importlib.util.find_spec("kokoro") is not None,
         "piper": importlib.util.find_spec("piper") is not None,
-        # Voxtral est joignable soit chez soi, soit avec une clé : dans les deux cas
-        # c'est une adresse, pas un paquet, qui le rend disponible.
-        "voxtral": bool(api_key()) or "api.mistral.ai" not in base_url(),
     }
+
+
+def configured() -> dict[str, bool]:
+    """Les moteurs servis par une adresse : c'est un réglage, pas un paquet, qui les rend
+    disponibles — et un réglage se change depuis l'interface, sans relancer l'atelier."""
+    from .tts.voxtral import api_key, base_url
+    from .tts.zonos2 import base_url as zonos2_url
+
+    return {
+        # Voxtral est joignable soit chez soi, soit avec une clé.
+        "voxtral": bool(api_key()) or "api.mistral.ai" not in base_url(),
+        "zonos2": bool(zonos2_url()),
+    }
+
+
+def engines() -> dict[str, bool]:
+    """Les moteurs que cet atelier peut charger, sans les charger."""
+    return {**installed(), **configured()}
 
 
 def hardware() -> dict[str, object]:
@@ -59,11 +72,16 @@ def hardware() -> dict[str, object]:
 
 def beat(root: Path, busy: int | None = None, static: dict | None = None) -> None:
     """Écrit le battement. Le renommage rend l'écriture atomique pour le lecteur."""
+    # Les paquets sont relevés une fois ; les adresses, à chaque battement, pour qu'un
+    # serveur renseigné dans les Réglages apparaisse sans relance.
+    known = dict(static["engines"]) if static and "engines" in static else engines()
+    known.update(configured())
     payload = {
         "time": time.time(),
         "pid": os.getpid(),
         "busy": busy,
-        **(static or {"engines": engines()}),
+        **{k: v for k, v in (static or {}).items() if k != "engines"},
+        "engines": known,
         **hardware(),
     }
     target = heartbeat_file(root)
@@ -95,7 +113,7 @@ class Pulse(threading.Thread):
         super().__init__(daemon=True, name="atelier-pulse")
         self.root = root
         self.busy: int | None = None
-        self._static = {"engines": engines()}
+        self._static = {"engines": installed()}
         self._stop = threading.Event()
 
     def run(self) -> None:

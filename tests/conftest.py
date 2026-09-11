@@ -20,6 +20,13 @@ LOREM = (
 )
 
 
+@pytest.fixture(autouse=True)
+def donnees_isolees(tmp_path_factory, monkeypatch):
+    """Aucun test ne lit les réglages ni les projets de la machine : le dossier des
+    données est un répertoire temporaire, vide, pour chaque test."""
+    monkeypatch.setenv("VOXLIBRIS_DATA", str(tmp_path_factory.mktemp("data")))
+
+
 def _chapter_html(title: str, paragraphs: int = 3) -> str:
     body = "\n".join(f"<p>{LOREM * 2}</p>" for _ in range(paragraphs))
     return f"<html><head><title>{title}</title></head><body><h1>{title}</h1>{body}</body></html>"

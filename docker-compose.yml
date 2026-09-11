@@ -4,8 +4,9 @@
 #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
 #                                                      idem, avec la carte NVIDIA
 #   docker compose --profile voxtral ... up            ajoute le serveur Voxtral local
+#   docker compose --profile zonos2 ... up             ajoute le serveur ZONOS2 local
 #
-# Sans GPU, Piper et Kokoro tournent sur processeur ; XTTS et Voxtral en réclament un.
+# Sans GPU, Piper et Kokoro tournent sur processeur ; XTTS, Voxtral et ZONOS2 en réclament un.
 # Les réglages (modèle de langage, clés, licence XTTS) viennent du fichier .env : copiez
 # .env.example et adaptez-le.
 
@@ -72,6 +73,34 @@ services:
       VLLM_USE_FLASHINFER_SAMPLER: "0"
     volumes:
       - models:/models
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ZONOS2 (Zyphra) chez vous : clonage de voix à partir d'un simple extrait audio,
+  # quarante langues, poids Apache 2.0. Facultatif — profil « zonos2 » — et gourmand :
+  # 16 Go de poids, une carte de 24 Go ; il ne cohabite pas avec voxtral sur une seule
+  # carte. Aucun jeton : le dépôt est ouvert. Puis, dans le .env :
+  #   VOXLIBRIS_ZONOS2_BASE_URL=http://zonos2:1919
+  # Les voix sont les fichiers audio de ./data/voices — déposés depuis la page Voix.
+  zonos2:
+    profiles: ["zonos2"]
+    build:
+      context: .
+      dockerfile: docker/zonos2.Dockerfile
+    image: voxlibris-zonos2
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - models:/models
+      - ${VOXLIBRIS_DATA_DIR:-./data}:/data
     ipc: host
     deploy:
       resources:

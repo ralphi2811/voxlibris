@@ -10,6 +10,7 @@ Licences des modèles, très différentes les unes des autres, voir NOTICE.md :
   Kokoro   Apache 2.0
   Piper    MIT
   Voxtral  CC BY-NC 4.0 pour les poids ; l'API, payante, autorise le commercial
+  ZONOS2   Apache 2.0 — et le seul qui clone une voix, à partir d'un extrait
 
 Voxtral est aussi le seul moteur distant : il envoie le texte du livre chez Mistral.
 """
@@ -303,11 +304,58 @@ class VoxtralBackend(Backend):
         return resample(audio, rate)
 
 
+class Zonos2Backend(Backend):
+    """ZONOS2 — Zyphra, Apache 2.0, servi chez soi ; clone une voix d'un extrait audio."""
+
+    name = "zonos2"
+    default_voice = ""
+    # Langue de normalisation du texte côté serveur — nombres, dates, abréviations.
+    language = "fr"
+
+    def __init__(
+        self,
+        voice: str = "",
+        device: str | None = None,
+        speed: float = DEFAULT_SPEED,
+    ) -> None:
+        from .zonos2 import Client, Zonos2Error
+
+        self._client = Client()
+        # Un serveur à soi peut ne pas être là : autant le savoir avant la calibration.
+        capabilities = self._client.probe()
+        # Les voix sont les fichiers du dossier, relus à chaque appel : on ne peut pas
+        # les connaître d'avance, mais on les connaît toujours à jour.
+        self._voices = {s["label"]: s["id"] for s in self._client.speakers()}
+        if not self._voices:
+            raise Zonos2Error(
+                "Aucune voix : déposez un extrait audio dans le dossier des voix, depuis "
+                "la page Voix de l'atelier."
+            )
+        chosen = resolve_voice(voice, list(self._voices)) if voice else next(iter(self._voices))
+        if chosen is None:
+            raise UnknownVoice(self.name, voice, list(self._voices))
+        self.voice = chosen
+        # Le modèle publié module le débit ; un autre point de contrôle pourrait ne pas.
+        self.supports_speed = bool(capabilities.get("speaking_rate_enabled", True))
+        self.speed = clamp_speed(speed) if self.supports_speed else DEFAULT_SPEED
+        self.sample_rate = SAMPLE_RATE
+
+    def voices(self) -> list[str]:  # type: ignore[override]
+        return sorted(self._voices)
+
+    def say(self, text: str) -> np.ndarray:
+        audio, rate = self._client.speak(
+            text, self._voices[self.voice], language=self.language, speed=self.speed
+        )
+        return resample(audio, rate)
+
+
 BACKENDS: dict[str, type[Backend]] = {
     "xtts": XttsBackend,
     "kokoro": KokoroBackend,
     "piper": PiperBackend,
     "voxtral": VoxtralBackend,
+    "zonos2": Zonos2Backend,
 }
 
 

@@ -424,6 +424,82 @@ class TestCouverture:
         assert response.headers["location"].endswith("?cover=introuvable")
 
 
+class TestClonage:
+    """Un extrait déposé devient une voix : c'est un fichier dans le dossier des voix."""
+
+    def test_depose_puis_retire(self, client, make_epub, tmp_path):
+        from voxlibris.config import voices_dir
+
+        name = TestRelecture._create(None, client, make_epub)
+        response = client.post(
+            f"/projects/{name}/voices/clone",
+            data={"label": "Marie Dupont"},
+            files={"file": ("enregistrement.wav", b"RIFF" + b"\0" * 100, "audio/wav")},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303 and "cloning=deposee" in response.headers["location"]
+        saved = voices_dir() / "marie-dupont.wav"
+        assert saved.read_bytes().startswith(b"RIFF")
+
+        page = client.get(f"/projects/{name}/voices?cloning=deposee").text
+        assert "marie dupont" in page and "extrait déposé" in page
+
+        # Un autre format sous le même nom remplace l'extrait, sans doublon.
+        client.post(
+            f"/projects/{name}/voices/clone",
+            data={"label": "Marie Dupont"},
+            files={"file": ("autre.mp3", b"ID3" + b"\0" * 50, "audio/mpeg")},
+        )
+        assert not saved.exists() and (voices_dir() / "marie-dupont.mp3").exists()
+
+        client.post(f"/projects/{name}/voices/clone/delete", data={"file": "marie-dupont.mp3"})
+        assert not (voices_dir() / "marie-dupont.mp3").exists()
+
+    def test_le_nom_vient_du_fichier_a_defaut(self, client, make_epub):
+        from voxlibris.config import voices_dir
+
+        name = TestRelecture._create(None, client, make_epub)
+        client.post(
+            f"/projects/{name}/voices/clone",
+            files={"file": ("Voix_Grave.flac", b"fLaC", "audio/flac")},
+        )
+        assert (voices_dir() / "voix-grave.flac").exists()
+
+    def test_refuse_ce_qui_n_est_pas_du_son(self, client, make_epub):
+        name = TestRelecture._create(None, client, make_epub)
+        response = client.post(
+            f"/projects/{name}/voices/clone",
+            files={"file": ("voix.txt", b"bonjour", "text/plain")},
+        )
+        assert response.status_code == 400
+
+    def test_le_moteur_est_presente_avec_ses_voix(self, client, make_epub, monkeypatch):
+        from voxlibris.web import app as app_module
+
+        name = TestRelecture._create(None, client, make_epub)
+        monkeypatch.setattr(app_module, "zonos2_voices", lambda: ["Marie", "American Female"])
+        page = client.get(f"/projects/{name}/voices").text
+        assert "ZONOS2" in page and "clonage de voix" in page
+        assert "ZONOS2 · Marie" in page
+
+    def test_la_sonde_des_reglages(self, client, monkeypatch):
+        from test_zonos2 import CAPABILITIES, SPEAKERS, FakeClient
+
+        from voxlibris.tts import zonos2
+
+        real = zonos2.Client
+        fake = FakeClient(
+            {"/tts/capabilities": (CAPABILITIES, {}), "/tts/speakers": (SPEAKERS, {})}
+        )
+        monkeypatch.setattr(zonos2, "Client", lambda *a, **k: fake)
+        assert "2 voix" in client.post("/settings/test/zonos2").text
+
+        # Sans adresse, le vrai client refuse de partir, et la page dit quoi renseigner.
+        monkeypatch.setattr(zonos2, "Client", real)
+        monkeypatch.setenv("VOXLIBRIS_ZONOS2_BASE_URL", "")
+        assert "VOXLIBRIS_ZONOS2_BASE_URL" in client.post("/settings/test/zonos2").text
+
+
 class TestPagesDOrigine:
     """Un EPUB paginé montre ses pages en regard du texte, dans un cadre isolé."""
 

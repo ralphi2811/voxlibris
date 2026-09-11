@@ -19,4 +19,5 @@ work/
 # Les Dockerfiles restent dehors, sauf le fichier de contraintes que l'ouvrier copie.
 docker/
 !docker/worker.constraints.txt
+!docker/zonos2-entrypoint.sh
 tests/

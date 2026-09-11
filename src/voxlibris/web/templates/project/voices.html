@@ -18,7 +18,7 @@
       {% else %}<span class="chip bad">absent de l'atelier</span>{% endif %}
     </div>
     <span class="muted small">{{ e.blurb }}</span>
-    <div class="chips"><span class="chip {{ e.licence_tone }}">{{ e.licence }}</span>{% if key == "voxtral" %}<span class="chip {% if voxtral_local %}ok{% else %}warn{% endif %}">{% if voxtral_local %}servi en local{% else %}API · texte envoyé{% endif %}</span>{% endif %}</div>
+    <div class="chips"><span class="chip {{ e.licence_tone }}">{{ e.licence }}</span>{% if key == "voxtral" %}<span class="chip {% if voxtral_local %}ok{% else %}warn{% endif %}">{% if voxtral_local %}servi en local{% else %}API · texte envoyé{% endif %}</span>{% endif %}{% if key == "zonos2" %}<span class="chip ok">clonage de voix</span>{% endif %}</div>
   </div>
   {% endfor %}
 </div>
@@ -73,6 +73,27 @@
       <div class="row small"><span class="muted">Voxtral via l'API Mistral</span><span class="spacer"></span><span>{{ "%.2f"|format(characters / 1000 * 0.016) }} $ · texte envoyé</span></div>
       <div class="row small"><span class="muted">Tout moteur local</span><span class="spacer"></span><span>0 €</span></div>
     </div>
+
+    <form class="card pad stack" method="post" action="/projects/{{ name }}/voices/clone" enctype="multipart/form-data">
+      <div class="row"><strong>Cloner une voix</strong><span class="spacer"></span><span class="chip {% if available and available.get("zonos2") %}ok{% else %}muted{% endif %}">ZONOS2</span></div>
+      {% if cloning == "deposee" %}<span class="chip ok">extrait déposé — la voix est prête</span>{% endif %}
+      {% if voice_samples %}
+      <div class="stack tight">
+        {% for v in voice_samples %}
+        <div class="row small"><span>{{ v.label }}</span><span class="muted">{{ v.file }}</span><span class="spacer"></span>
+          <button class="btn sm linkish" type="submit" formaction="/projects/{{ name }}/voices/clone/delete" formnovalidate name="file" value="{{ v.file }}" title="Retirer cet extrait">{{ icons.ic("x", 12) }}</button></div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <span class="muted small">Aucun extrait encore.</span>
+      {% endif %}
+      <div class="row">
+        <input class="input grow" type="text" name="label" placeholder="nom de la voix" maxlength="60">
+        <input class="input grow" type="file" name="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.opus,.aac,.webm" required>
+      </div>
+      <span class="muted small">Dix à trente secondes de parole nette, sans musique. Un extrait dont vous avez le droit de vous servir : cloner quelqu'un sans son accord, c'est non.{% if not (available and available.get("zonos2")) %} Renseignez l'adresse du serveur ZONOS2 dans les Réglages pour qu'il s'en serve.{% endif %}</span>
+      <button class="btn" type="submit">{{ icons.ic("mic", 14) }}Déposer l'extrait</button>
+    </form>
 
     <form class="card pad stack" method="post" action="/projects/{{ name }}/voice">
       <strong>Ou saisir directement</strong>
