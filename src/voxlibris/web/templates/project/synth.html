@@ -70,15 +70,14 @@
       </div>
       {% if flagged %}
       <table class="flagged">
-        <thead><tr><th class="w60">Seg.</th><th class="w70">Instant</th><th>Texte</th><th class="w110">Cause</th><th class="w90">Essais</th><th class="w300"></th></tr></thead>
+        <thead><tr><th class="w60">Seg.</th><th class="w70">Instant</th><th>Texte</th><th class="w130">Cause</th><th class="w400"></th></tr></thead>
         <tbody>
         {% for f in flagged %}
         <tr>
           <td class="mono muted">{{ "%02d"|format(f.chapter) }}·{{ f.idx }}</td>
           <td class="mono">{{ f.start|clock }}</td>
           <td class="serif"><button class="linkish ellipsis context-toggle" type="button" title="voir le passage">{{ f.text }}</button></td>
-          <td>{% if f.approved %}<span class="chip ok">{{ icons.ic("check", 12) }}{{ f.cause or "validé" }}</span>{% else %}<span class="chip warn">{{ f.cause or "à vérifier" }}</span>{% endif %}</td>
-          <td class="mono muted">{{ f.attempts }}{% if f.split %} · découpé{% endif %}</td>
+          <td title="{{ f.attempts }} essai{{ "s" if f.attempts != 1 }}{% if f.split %}, rejoué phrase par phrase{% endif %}">{% if f.approved %}<span class="chip ok">{{ icons.ic("check", 12) }}{{ f.cause or "validé" }}</span>{% else %}<span class="chip warn">{{ f.cause or "à vérifier" }}</span>{% endif %}</td>
           <td>
             <div class="row end">
               <button class="btn sm listen" type="button" data-src="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(f.chapter) }}.wav" data-start="{{ f.start }}" data-end="{{ f.end }}" data-label="Piste {{ '%02d'|format(f.chapter) }} · segment {{ f.idx }} · {{ f.start|clock }}">{{ icons.ic("play", 14) }}Écouter</button>
@@ -92,7 +91,7 @@
           </td>
         </tr>
         <tr class="context" hidden>
-          <td colspan="6">
+          <td colspan="5">
             <p class="passage serif">{% if f.before %}<span class="muted">{{ f.before }}</span> {% endif %}<mark>{{ f.text }}</mark>{% if f.after %} <span class="muted">{{ f.after }}</span>{% endif %}</p>
             <p class="muted small">{{ icons.ic("edit", 12) }}Corriger ouvre le texte relu à ce passage ; à la prochaine synthèse, seuls les segments dont le texte a changé sont refaits. Valider garde ce segment tel quel.</p>
           </td>
