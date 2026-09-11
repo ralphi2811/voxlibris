@@ -40,12 +40,15 @@
           <td class="mono">{{ t.segments or "—" }}</td>
           <td class="mono">{% if t.seconds %}{{ t.seconds|clock }}{% else %}—{% endif %}</td>
           <td>
-            {% if t.text_changed %}<span class="chip warn" title="le texte a été enregistré après la préparation">{{ icons.ic("edit", 12) }}texte corrigé</span>
-            {% elif t.current and t.flagged %}<a class="chip warn" href="/projects/{{ name }}/synth?chapter={{ t.number }}#flagged" title="voir ces segments">{{ t.flagged }} à écouter</a>
+            <div class="chips">
+            {% if t.text_changed %}<span class="chip warn" title="le texte a été enregistré après la préparation">{{ icons.ic("edit", 12) }}texte corrigé</span>{% endif %}
+            {% if t.flagged and (t.current or t.text_changed) %}<a class="chip warn" href="/projects/{{ name }}/synth?chapter={{ t.number }}#flagged" title="voir ces segments">{{ t.flagged }} à écouter</a>
+            {% elif t.text_changed %}
             {% elif t.current %}<span class="chip ok">{{ icons.ic("check", 12) }}propre</span>
             {% elif t.synthesized %}<span class="chip warn">périmée</span>
             {% elif not t.segments %}<span class="chip muted">à préparer</span>
             {% else %}<span class="chip muted">à faire</span>{% endif %}
+            </div>
           </td>
           <td><div class="row end">{% if t.synthesized %}<button class="btn sm ghost listen" type="button" title="écouter la piste" data-src="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(t.number) }}.wav" data-label="Piste {{ '%02d'|format(t.number) }} · {{ t.title }}">{{ icons.ic("play", 14) }}</button><a class="btn sm ghost" href="/projects/{{ name }}/files/wav/ch{{ '%02d'|format(t.number) }}.wav" download title="télécharger le WAV">{{ icons.ic("download", 14) }}</a>{% endif %}</div></td>
         </tr>

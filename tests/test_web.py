@@ -311,6 +311,32 @@ class TestPisteAJour:
         assert "Texte corrigé depuis la préparation — chapitre 01" in page
         assert "texte corrigé" in page
 
+        # Les segments encore à écouter restent accessibles malgré la correction.
+        import json
+
+        wav = root / "out" / "wav"
+        wav.mkdir(parents=True)
+        (wav / "ch01.wav").write_bytes(b"RIFF" + b"\0" * 60)
+        (wav / "ch01.timing.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "idx": 0,
+                        "start": 0.0,
+                        "end": 1.0,
+                        "clean": False,
+                        "cause": "babil",
+                        "attempts": 3,
+                        "split": False,
+                        "text": "Un.",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        page = client.get(f"/projects/{name}/synth").text
+        assert "texte corrigé" in page and "1 à écouter" in page
+
 
 class TestFichiers:
     """Les pistes s'écoutent dans la page ; les livres audio se téléchargent."""
