@@ -20,4 +20,5 @@ work/
 docker/
 !docker/worker.constraints.txt
 !docker/zonos2-entrypoint.sh
+!docker/omnivoice-server.py
 tests/

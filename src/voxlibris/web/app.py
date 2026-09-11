@@ -78,6 +78,13 @@ ENGINES = {
         "licence_tone": "ok",
         "where": "GPU · 24 Go",
     },
+    "omnivoice": {
+        "label": "OmniVoice",
+        "blurb": "Clone une voix d'un extrait de dix secondes. Léger, six cents langues.",
+        "licence": "Apache 2.0",
+        "licence_tone": "ok",
+        "where": "GPU · 3 Go",
+    },
 }
 
 # Voix XTTS proposées d'emblée au banc d'essai : elles ne peuvent pas être listées sans
@@ -166,8 +173,9 @@ def catalogues(language: str = "") -> dict[str, list[str]]:
     XTTS n'en fournit aucune : ses locuteurs ne se lisent qu'une fois les huit
     gigaoctets en mémoire, ce que l'interface n'a pas à faire — d'où les suggestions
     fixes. Voxtral tient son catalogue derrière une simple requête ; on la mémorise, car
-    elle serait sinon refaite à chaque affichage de page. ZONOS2 aussi, mais sans
-    mémoire : ses voix sont les fichiers d'un dossier, qui change sous nos yeux.
+    elle serait sinon refaite à chaque affichage de page. ZONOS2 et OmniVoice aussi,
+    mais sans mémoire : leurs voix sont les fichiers d'un dossier, qui change sous
+    nos yeux.
 
     Une absence de clé ou un service en panne ne laissent qu'une liste vide : on retombe
     alors sur la saisie libre, plutôt que d'empêcher l'affichage du projet.
@@ -183,6 +191,7 @@ def catalogues(language: str = "") -> dict[str, list[str]]:
             _voxtral_cache[language] = []
     known["voxtral"] = _voxtral_cache[language]
     known["zonos2"] = zonos2_voices()
+    known["omnivoice"] = omnivoice_voices()
     return known
 
 
@@ -195,6 +204,19 @@ ZONOS2_SHIPPED = ("AmericanFemale", "AmericanMale", "BritishFemale")
 def zonos2_voices() -> list[str]:
     """Les voix que voit le serveur ZONOS2 — rien, s'il n'est pas configuré ou absent."""
     from ..tts.zonos2 import base_url, voice_names
+
+    if not base_url():
+        return []
+    try:
+        names = voice_names()
+    except Exception:
+        return []
+    return sorted(names, key=lambda n: (n in ZONOS2_SHIPPED, n.lower()))
+
+
+def omnivoice_voices() -> list[str]:
+    """Les voix que voit le serveur OmniVoice — rien, s'il n'est pas configuré ou absent."""
+    from ..tts.omnivoice import base_url, voice_names
 
     if not base_url():
         return []
@@ -774,7 +796,8 @@ def voices_page(request: Request, name: str, cloning: str = ""):
 async def upload_voice(name: str, file: UploadFile, label: str = Form("")):
     """Dépose un extrait de voix à cloner. Le fichier est la voix : son nom, l'intitulé.
 
-    Le serveur ZONOS2 relit le dossier à chaque liste : rien à relancer. L'extrait n'est
+    Les serveurs ZONOS2 et OmniVoice relisent le dossier à chaque liste : rien à
+    relancer. L'extrait n'est
     lié à aucun projet — une voix sert à tous les livres.
     """
     from ..tts.zonos2 import AUDIO_EXTENSIONS
@@ -1108,6 +1131,17 @@ def test_service(request: Request, service: str):
             voices = client.speakers()
             ok = True
             text = f"serveur local · {len(voices)} voix"
+        except Exception as error:
+            ok, text = False, str(error)
+    elif service == "omnivoice":
+        from ..tts.omnivoice import Client
+
+        try:
+            client = Client()
+            health = client.probe()
+            voices = client.speakers()
+            ok = True
+            text = f"serveur local · {health.get('device') or '?'} · {len(voices)} voix"
         except Exception as error:
             ok, text = False, str(error)
     else:

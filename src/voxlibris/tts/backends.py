@@ -10,7 +10,8 @@ Licences des modèles, très différentes les unes des autres, voir NOTICE.md :
   Kokoro   Apache 2.0
   Piper    MIT
   Voxtral  CC BY-NC 4.0 pour les poids ; l'API, payante, autorise le commercial
-  ZONOS2   Apache 2.0 — et le seul qui clone une voix, à partir d'un extrait
+  ZONOS2   Apache 2.0 — clone une voix à partir d'un extrait ; veut la carte entière
+  OmniVoice Apache 2.0 — clone aussi, en léger : tient à côté de XTTS
 
 Voxtral est aussi le seul moteur distant : il envoie le texte du livre chez Mistral.
 """
@@ -350,12 +351,56 @@ class Zonos2Backend(Backend):
         return resample(audio, rate)
 
 
+class OmnivoiceBackend(Backend):
+    """OmniVoice — k2-fsa, Apache 2.0, servi chez soi ; clone une voix d'un extrait audio."""
+
+    name = "omnivoice"
+    default_voice = ""
+    # Langue du texte, dite au modèle plutôt que devinée : un livre est d'une seule langue.
+    language = "fr"
+
+    def __init__(
+        self,
+        voice: str = "",
+        device: str | None = None,
+        speed: float = DEFAULT_SPEED,
+    ) -> None:
+        from .omnivoice import Client, OmnivoiceError
+
+        self._client = Client()
+        self._client.probe()
+        # Les voix sont les fichiers du dossier, relus à chaque appel — le même dossier
+        # que ZONOS2 : un extrait déposé sert aux deux.
+        self._voices = {s["label"]: s["id"] for s in self._client.speakers()}
+        if not self._voices:
+            raise OmnivoiceError(
+                "Aucune voix : déposez un extrait audio dans le dossier des voix, depuis "
+                "la page Voix de l'atelier."
+            )
+        chosen = resolve_voice(voice, list(self._voices)) if voice else next(iter(self._voices))
+        if chosen is None:
+            raise UnknownVoice(self.name, voice, list(self._voices))
+        self.voice = chosen
+        self.speed = clamp_speed(speed)
+        self.sample_rate = SAMPLE_RATE
+
+    def voices(self) -> list[str]:  # type: ignore[override]
+        return sorted(self._voices)
+
+    def say(self, text: str) -> np.ndarray:
+        audio, rate = self._client.speak(
+            text, self._voices[self.voice], language=self.language, speed=self.speed
+        )
+        return resample(audio, rate)
+
+
 BACKENDS: dict[str, type[Backend]] = {
     "xtts": XttsBackend,
     "kokoro": KokoroBackend,
     "piper": PiperBackend,
     "voxtral": VoxtralBackend,
     "zonos2": Zonos2Backend,
+    "omnivoice": OmnivoiceBackend,
 }
 
 

@@ -34,6 +34,7 @@ EDITABLE = (
     "VOXLIBRIS_MISTRAL_API_KEY",
     "VOXLIBRIS_MISTRAL_BASE_URL",
     "VOXLIBRIS_ZONOS2_BASE_URL",
+    "VOXLIBRIS_OMNIVOICE_BASE_URL",
     "COQUI_TOS_AGREED",
     "VOXLIBRIS_DEVICE",
 )
@@ -52,7 +53,7 @@ def settings_file() -> Path:
 
 
 def voices_dir() -> Path:
-    """Dossier des extraits de voix à cloner. Le serveur ZONOS2 le lit tel quel."""
+    """Dossier des extraits de voix à cloner ; ZONOS2 et OmniVoice le lisent tel quel."""
     return data_dir() / "voices"
 
 

@@ -37,6 +37,7 @@ def installed() -> dict[str, bool]:
 def configured() -> dict[str, bool]:
     """Les moteurs servis par une adresse : c'est un réglage, pas un paquet, qui les rend
     disponibles — et un réglage se change depuis l'interface, sans relancer l'atelier."""
+    from .tts.omnivoice import base_url as omnivoice_url
     from .tts.voxtral import api_key, base_url
     from .tts.zonos2 import base_url as zonos2_url
 
@@ -44,6 +45,7 @@ def configured() -> dict[str, bool]:
         # Voxtral est joignable soit chez soi, soit avec une clé.
         "voxtral": bool(api_key()) or "api.mistral.ai" not in base_url(),
         "zonos2": bool(zonos2_url()),
+        "omnivoice": bool(omnivoice_url()),
     }
 
 

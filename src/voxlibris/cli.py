@@ -252,7 +252,7 @@ def normalize(
 
 @app.command()
 def voices(
-    backend: str = typer.Argument("xtts", help="xtts, kokoro, piper, voxtral ou zonos2"),
+    backend: str = typer.Argument("xtts", help="xtts, kokoro, piper, voxtral, zonos2 ou omnivoice"),
 ) -> None:
     """Liste les voix disponibles pour un moteur."""
     from .tts.backends import load

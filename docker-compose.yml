@@ -5,6 +5,7 @@
 #                                                      idem, avec la carte NVIDIA
 #   docker compose --profile voxtral ... up            ajoute le serveur Voxtral local
 #   docker compose --profile zonos2 ... up             ajoute le serveur ZONOS2 local
+#   docker compose --profile omnivoice ... up          ajoute le serveur OmniVoice local
 #
 # Sans GPU, Piper et Kokoro tournent sur processeur ; XTTS, Voxtral et ZONOS2 en réclament un.
 # Les réglages (modèle de langage, clés, licence XTTS) viennent du fichier .env : copiez
@@ -94,6 +95,33 @@ services:
       context: .
       dockerfile: docker/zonos2.Dockerfile
     image: voxlibris-zonos2
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - models:/models
+      - ${VOXLIBRIS_DATA_DIR:-./data}:/data
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # OmniVoice (k2-fsa) chez vous : clonage de voix lui aussi, des mêmes extraits, mais
+  # léger — 0,8 milliard de paramètres, trois gigaoctets en lecture, il tient à côté de XTTS.
+  # Six cents langues, poids Apache 2.0, dépôt ouvert. Facultatif — profil « omnivoice ».
+  # Le serveur HTTP est le nôtre (docker/omnivoice-server.py). Puis, dans le .env :
+  #   VOXLIBRIS_OMNIVOICE_BASE_URL=http://omnivoice:1920
+  omnivoice:
+    profiles: ["omnivoice"]
+    build:
+      context: .
+      dockerfile: docker/omnivoice.Dockerfile
+    image: voxlibris-omnivoice
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - path: .env

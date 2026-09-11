@@ -527,6 +527,29 @@ class TestClonage:
         monkeypatch.setenv("VOXLIBRIS_ZONOS2_BASE_URL", "")
         assert "VOXLIBRIS_ZONOS2_BASE_URL" in client.post("/settings/test/zonos2").text
 
+    def test_omnivoice_est_presente_avec_ses_voix(self, client, make_epub, monkeypatch):
+        from voxlibris.web import app as app_module
+
+        name = TestRelecture._create(None, client, make_epub)
+        monkeypatch.setattr(app_module, "zonos2_voices", lambda: [])
+        monkeypatch.setattr(app_module, "omnivoice_voices", lambda: ["Marie"])
+        page = client.get(f"/projects/{name}/voices").text
+        assert "OmniVoice · Marie" in page and "OmniVoice" in page
+
+    def test_la_sonde_omnivoice(self, client, monkeypatch):
+        from test_omnivoice import HEALTH, VOICES, FakeClient
+
+        from voxlibris.tts import omnivoice
+
+        real = omnivoice.Client
+        fake = FakeClient({"/health": (HEALTH, {}), "/voices": (VOICES, {})})
+        monkeypatch.setattr(omnivoice, "Client", lambda *a, **k: fake)
+        assert "cuda · 2 voix" in client.post("/settings/test/omnivoice").text
+
+        monkeypatch.setattr(omnivoice, "Client", real)
+        monkeypatch.setenv("VOXLIBRIS_OMNIVOICE_BASE_URL", "")
+        assert "VOXLIBRIS_OMNIVOICE_BASE_URL" in client.post("/settings/test/omnivoice").text
+
 
 class TestPagesDOrigine:
     """Un EPUB paginé montre ses pages en regard du texte, dans un cadre isolé."""

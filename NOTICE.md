@@ -17,6 +17,7 @@ engage donc l'utilisateur au moment où il choisit de l'exécuter.
 | **Piper** | MIT | Aucune restriction d'usage |
 | **Voxtral TTS** (Mistral) | CC BY-NC 4.0 | **Poids non commerciaux ; l'API, payante, l'autorise** |
 | **ZONOS2** (Zyphra) | Apache 2.0 | Aucune restriction d'usage ; serveur sous MIT |
+| **OmniVoice** (k2-fsa) | Apache 2.0 | Aucune restriction d'usage ; Whisper (MIT) transcrit les extraits |
 
 ### Voxtral TTS : la restriction est à l'envers des autres
 
@@ -33,11 +34,11 @@ de cloner une voix sans autorisation.
 Pour un livre encore protégé, l'envoyer à un tiers n'est pas anodin : c'est une
 transmission, là où la synthèse locale reste une copie privée.
 
-### ZONOS2 : le clonage engage celui qui dépose l'extrait
+### ZONOS2 et OmniVoice : le clonage engage celui qui dépose l'extrait
 
-ZONOS2 clone une voix à partir de quelques secondes d'audio, sans rien demander d'autre.
-Les poids sont sous Apache 2.0 et le serveur de Zyphra sous MIT — rien, dans les licences,
-ne borne cet usage. C'est donc à vous de vous en tenir à des voix dont vous avez le droit
+ZONOS2 et OmniVoice clonent une voix à partir de quelques secondes d'audio, sans rien
+demander d'autre. Leurs poids sont sous Apache 2.0, le serveur de Zyphra sous MIT, celui
+d'OmniVoice est le nôtre — rien, dans les licences, ne borne cet usage. C'est donc à vous de vous en tenir à des voix dont vous avez le droit
 de vous servir : la vôtre, celle d'une personne qui y consent, une voix libre de droits.
 Cloner quelqu'un à son insu relève du droit à la voix et à l'image, indépendamment de
 toute licence logicielle. Les extraits restent dans `data/voices`, sur votre machine.

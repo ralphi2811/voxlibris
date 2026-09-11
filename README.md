@@ -96,6 +96,7 @@ au segment qui l'a produit. Entendez quelque chose à 12:34, retrouvez le segmen
 | **Piper** | Processeur | MIT | Quasi instantané : idéal pour régler pauses et vitesse avant la version finale. |
 | **Voxtral TTS** | **API distante**, payante | CC BY-NC 4.0 | Neuf langues, sans carte graphique. |
 | **ZONOS2** | GPU, ~16 Go, serveur sous profil | Apache 2.0 | **Clone une voix** d'un simple extrait. Quarante langues. |
+| **OmniVoice** | GPU, ~3 Go, serveur sous profil | Apache 2.0 | **Clone une voix** lui aussi, léger : tient à côté de XTTS. Six cents langues. |
 
 Trente voix sont fournies, dont **six françaises** — « Marie », en six émotions, de
 `Neutral` à `Curious`. `voxlibris voices voxtral` liste celles que voit votre compte, et
@@ -198,7 +199,7 @@ coup d'œil où en est chaque livre et ce qui reste à faire.
   rejouer, valider. Rejouer un segment le recolle dans sa piste sans refaire le
   chapitre ; le valider le garde tel quel, l'oreille ayant le dernier mot.
 - **Assemblage** et **Journal** des tâches.
-- **Réglages** : modèle de langage, Voxtral, ZONOS2, licence XTTS, matériel — enregistrés dans le
+- **Réglages** : modèle de langage, Voxtral, ZONOS2, OmniVoice, licence XTTS, matériel — enregistrés dans le
   dossier des données, partagés avec l'atelier, pris en compte sans redémarrage, avec un
   bouton Tester par service. Le `.env` reste la couche de dessous.
 
@@ -234,7 +235,8 @@ docker compose --profile voxtral -f docker-compose.yml -f docker-compose.gpu.yml
 ```
 
 puis `VOXLIBRIS_MISTRAL_BASE_URL=http://voxtral:8600/v1` dans le `.env`. ZONOS2 suit le
-même modèle avec `--profile zonos2` et `VOXLIBRIS_ZONOS2_BASE_URL=http://zonos2:1919`.
+même modèle avec `--profile zonos2` et `VOXLIBRIS_ZONOS2_BASE_URL=http://zonos2:1919`,
+OmniVoice avec `--profile omnivoice` et `VOXLIBRIS_OMNIVOICE_BASE_URL=http://omnivoice:1920`.
 Pour joindre
 un Ollama installé sur la machine depuis les conteneurs, l'adresse est
 `http://host.docker.internal:11434/v1` — de même, `…:8600/v1` pour un vLLM lancé à la
@@ -268,6 +270,7 @@ Le premier `up` construit les images, et l'atelier est lourd — c'est PyTorch a
 | `voxlibris-worker` | 15 Go | PyTorch, les moteurs, Tesseract, ffmpeg |
 | `voxlibris-voxtral` | 30 Go | vLLM, profil `voxtral` seulement |
 | `voxlibris-zonos2` | 37 Go | serveur de Zyphra sur CUDA complet, profil `zonos2` seulement |
+| `voxlibris-omnivoice` | 13 Go | PyTorch et OmniVoice, profil `omnivoice` seulement |
 
 Les poids eux-mêmes se téléchargent à la première synthèse, dans le volume `models`.
 
@@ -277,6 +280,29 @@ qui est `/data` dans le conteneur :
 ```bash
 docker compose run --rm worker voxlibris ingest /data/livre.epub --out /data/projet
 ```
+
+### OmniVoice : le clonage léger
+
+[OmniVoice](https://github.com/k2-fsa/OmniVoice), de k2-fsa, clone une voix lui aussi, à
+partir des mêmes extraits — et il est léger : 0,8 milliard de paramètres, trois
+gigaoctets de carte en lecture, il tient à côté de XTTS là où ZONOS2 veut la carte pour
+lui seul. Six cents
+langues, poids Apache 2.0, et en français un taux d'erreur de mots un peu meilleur que
+ZONOS2 ; sa sortie est à 24 kHz. Le paquet ne livre pas de serveur : celui de voxlibris,
+`docker/omnivoice-server.py`, tient en trois routes.
+
+```bash
+docker compose --profile omnivoice -f docker-compose.yml -f docker-compose.gpu.yml up
+```
+
+puis `VOXLIBRIS_OMNIVOICE_BASE_URL=http://omnivoice:1920` dans le `.env` ou les Réglages.
+Les poids (1,6 Go, plus Whisper qui transcrit les extraits) se téléchargent au premier
+démarrage dans le volume `models`. Whisper transcrit chaque extrait une fois, au
+démarrage ou au dépôt ; il prend dix gigaoctets le temps de le faire, et passe de lui-même
+sur le processeur sous 12 Go de carte. D'un extrait long, le serveur ne retient que les
+douze premières secondes, coupées au silence le plus net : au-delà, le modèle clone
+moins bien.
+L'extrait doit être dans la langue du livre, sans quoi la lecture prend son accent.
 
 ### En ligne de commande
 
