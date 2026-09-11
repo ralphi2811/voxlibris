@@ -186,6 +186,12 @@ def catalogues(language: str = "") -> dict[str, list[str]]:
     return known
 
 
+# Les voix anglaises livrées avec le serveur, posées dans le dossier au premier départ.
+# Elles passent derrière celles qu'on a déposées : pour un livre français, ce sont les
+# siennes qu'on veut voir au banc, pas trois voix d'exemple.
+ZONOS2_SHIPPED = ("AmericanFemale", "AmericanMale", "BritishFemale")
+
+
 def zonos2_voices() -> list[str]:
     """Les voix que voit le serveur ZONOS2 — rien, s'il n'est pas configuré ou absent."""
     from ..tts.zonos2 import base_url, voice_names
@@ -193,9 +199,10 @@ def zonos2_voices() -> list[str]:
     if not base_url():
         return []
     try:
-        return voice_names()
+        names = voice_names()
     except Exception:
         return []
+    return sorted(names, key=lambda n: (n in ZONOS2_SHIPPED, n.lower()))
 
 
 def voice_samples() -> list[dict[str, str]]:
@@ -222,10 +229,21 @@ def voxtral_is_local() -> bool:
     return "api.mistral.ai" not in (base_url() or DEFAULT_BASE_URL)
 
 
-def sample_candidates(language: str = "") -> list[tuple[str, str, str, bool]]:
-    """Voix à proposer au banc d'essai : (moteur, voix, intitulé, cochée d'avance)."""
+def sample_candidates(
+    language: str = "", project: Project | None = None
+) -> list[tuple[str, str, str, bool]]:
+    """Voix à proposer au banc d'essai : (moteur, voix, intitulé, cochée d'avance).
+
+    Deux voix XTTS sont cochées pour un projet qui n'a encore rien écouté ni choisi :
+    c'est un point de départ. Dès qu'un extrait existe ou qu'un moteur est retenu, plus
+    rien n'est coché d'office — surtout pas ce qui a déjà été produit.
+    """
+    fresh = project is None or (not project.backend and not samples_of(project))
+    done = (
+        set() if project is None else {(s["backend"], s["voice_raw"]) for s in samples_of(project)}
+    )
     rows: list[tuple[str, str, str, bool]] = [
-        ("xtts", voice, f"XTTS · {voice}", index < 2)
+        ("xtts", voice, f"XTTS · {voice}", fresh and index < 2 and ("xtts", voice) not in done)
         for index, voice in enumerate(XTTS_SUGGESTIONS)
     ]
     for backend, voices in catalogues(language).items():
@@ -742,7 +760,7 @@ def voices_page(request: Request, name: str, cloning: str = ""):
         engines=ENGINES,
         available=available,
         catalogues=catalogues(project.language),
-        candidates=sample_candidates(project.language),
+        candidates=sample_candidates(project.language, project),
         samples=samples_of(project),
         voxtral_local=voxtral_is_local(),
         voice_samples=voice_samples(),
@@ -778,10 +796,14 @@ async def upload_voice(name: str, file: UploadFile, label: str = Form("")):
 
 
 @app.post("/projects/{name}/voices/clone/delete")
-def delete_voice(name: str, file: str = Form(...)):
-    """Retire un extrait : la voix disparaît du serveur à sa prochaine liste."""
+def delete_voice(name: str, sample: str = Form(...)):
+    """Retire un extrait : la voix disparaît du serveur à sa prochaine liste.
+
+    Le champ ne s'appelle pas « file » : le bouton vit dans le formulaire de dépôt, dont
+    le sélecteur de fichier porte déjà ce nom, et un fichier vide l'emporterait.
+    """
     load_project(name)
-    target = voices_dir() / Path(file).name
+    target = voices_dir() / Path(sample).name
     if target.is_file():
         target.unlink()
     return RedirectResponse(f"/projects/{name}/voices", status_code=303)

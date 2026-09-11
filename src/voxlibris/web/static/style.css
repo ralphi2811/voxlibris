@@ -255,3 +255,10 @@ tr.context mark { background: var(--warn-soft); color: var(--ink); padding: 0 3p
 .notice .ic-wrap { color: var(--warn); flex: none; margin-top: 2px; }
 .notice ol { margin: 4px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .stack.tight { gap: 6px; }
+
+/* Sélecteur de fichier habillé en bouton : le natif ne se stylise pas. Le nom du fichier
+   choisi remplace le libellé, tronqué s'il déborde. */
+.file-pick { position: relative; max-width: 220px; overflow: hidden; }
+.file-pick input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.file-pick .file-name { overflow: hidden; text-overflow: ellipsis; }
+.file-pick.picked { border-color: var(--accent); }

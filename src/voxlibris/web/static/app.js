@@ -157,6 +157,14 @@
     fill();
   }
 
+  // --- Sélecteur de fichier habillé : montrer ce qui a été choisi ----------------------
+  document.querySelectorAll(".file-pick input[type=file]").forEach(function (input) {
+    input.addEventListener("change", function () {
+      var label = input.closest(".file-pick"), name = label.querySelector(".file-name");
+      if (input.files && input.files[0]) { name.textContent = input.files[0].name; label.classList.add("picked"); }
+    });
+  });
+
   // --- Synthèse : écouter une piste ou un segment isolé ------------------------------------
   // La piste entière est chargée par le navigateur, qui saute à l'instant voulu ; on
   // arrête la lecture à la fin du segment. Aucun découpage côté serveur. Le lecteur

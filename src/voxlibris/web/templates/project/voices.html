@@ -81,7 +81,7 @@
       <div class="stack tight">
         {% for v in voice_samples %}
         <div class="row small"><span>{{ v.label }}</span><span class="muted">{{ v.file }}</span><span class="spacer"></span>
-          <button class="btn sm linkish" type="submit" formaction="/projects/{{ name }}/voices/clone/delete" formnovalidate name="file" value="{{ v.file }}" title="Retirer cet extrait">{{ icons.ic("x", 12) }}</button></div>
+          <button class="btn sm ghost" type="submit" formaction="/projects/{{ name }}/voices/clone/delete" formnovalidate name="sample" value="{{ v.file }}" title="Retirer cette voix">{{ icons.ic("trash", 13) }}</button></div>
         {% endfor %}
       </div>
       {% else %}
@@ -89,10 +89,10 @@
       {% endif %}
       <div class="row">
         <input class="input grow" type="text" name="label" placeholder="nom de la voix" maxlength="60">
-        <input class="input grow" type="file" name="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.opus,.aac,.webm" required>
+        <label class="btn file-pick" title="Un fichier audio : wav, mp3, flac, m4a, ogg, opus, aac ou webm"><input type="file" name="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.opus,.aac,.webm" required>{{ icons.ic("upload", 14) }}<span class="file-name">Choisir l'extrait</span></label>
       </div>
       <span class="muted small">Dix à trente secondes de parole nette, sans musique. Un extrait dont vous avez le droit de vous servir : cloner quelqu'un sans son accord, c'est non.{% if not (available and available.get("zonos2")) %} Renseignez l'adresse du serveur ZONOS2 dans les Réglages pour qu'il s'en serve.{% endif %}</span>
-      <button class="btn" type="submit">{{ icons.ic("mic", 14) }}Déposer l'extrait</button>
+      <button class="btn primary" type="submit">{{ icons.ic("mic", 14) }}Déposer l'extrait</button>
     </form>
 
     <form class="card pad stack" method="post" action="/projects/{{ name }}/voice">

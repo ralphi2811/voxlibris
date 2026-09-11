@@ -452,8 +452,20 @@ class TestClonage:
         )
         assert not saved.exists() and (voices_dir() / "marie-dupont.mp3").exists()
 
-        client.post(f"/projects/{name}/voices/clone/delete", data={"file": "marie-dupont.mp3"})
+        client.post(f"/projects/{name}/voices/clone/delete", data={"sample": "marie-dupont.mp3"})
         assert not (voices_dir() / "marie-dupont.mp3").exists()
+
+    def test_rien_n_est_coche_d_office_une_fois_le_banc_entame(self, client, make_epub):
+        from voxlibris.web import app as app_module
+
+        name = TestRelecture._create(None, client, make_epub)
+        project = app_module.load_project(name)
+        checked = [v for _, v, _, on in app_module.sample_candidates("fr", project) if on]
+        assert checked == ["Viktor Menelaos", "Damien Black"]
+
+        (project.out_dir / "samples").mkdir(parents=True)
+        (project.out_dir / "samples" / "xtts--Viktor_Menelaos.wav").write_bytes(b"RIFF")
+        assert not [on for *_, on in app_module.sample_candidates("fr", project) if on]
 
     def test_le_nom_vient_du_fichier_a_defaut(self, client, make_epub):
         from voxlibris.config import voices_dir
@@ -472,6 +484,22 @@ class TestClonage:
             files={"file": ("voix.txt", b"bonjour", "text/plain")},
         )
         assert response.status_code == 400
+
+    def test_les_voix_deposees_passent_devant_les_voix_d_exemple(self, monkeypatch):
+        from voxlibris.web import app as app_module
+
+        monkeypatch.setenv("VOXLIBRIS_ZONOS2_BASE_URL", "http://zonos2:1919")
+        monkeypatch.setattr(
+            "voxlibris.tts.zonos2.voice_names",
+            lambda *a, **k: ["AmericanFemale", "AmericanMale", "BritishFemale", "marie", "Paul"],
+        )
+        assert app_module.zonos2_voices() == [
+            "marie",
+            "Paul",
+            "AmericanFemale",
+            "AmericanMale",
+            "BritishFemale",
+        ]
 
     def test_le_moteur_est_presente_avec_ses_voix(self, client, make_epub, monkeypatch):
         from voxlibris.web import app as app_module
