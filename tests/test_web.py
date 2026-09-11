@@ -403,6 +403,27 @@ class TestValidation:
         assert "1 signalé" in client.get(f"/projects/{name}/synth").text
 
 
+class TestCouverture:
+    def test_tiree_de_l_epub(self, client, make_epub):
+        name = TestRelecture._create(None, client, make_epub)
+        # Le livre de test n'a pas d'image de couverture.
+        assert client.get(f"/projects/{name}/cover").status_code == 404
+
+    def test_cherchee_en_ligne(self, client, make_epub, monkeypatch):
+        name = TestRelecture._create(None, client, make_epub)
+        monkeypatch.setattr(
+            "voxlibris.ingest.metadata.search_cover", lambda title, author="", **k: b"J" * 5000
+        )
+        response = client.post(f"/projects/{name}/cover/search", follow_redirects=False)
+        assert response.headers["location"].endswith("?cover=trouvee")
+        assert client.get(f"/projects/{name}/cover").content == b"J" * 5000
+        assert "Trouvée sur Open Library" in client.get(f"/projects/{name}?cover=trouvee").text
+
+        monkeypatch.setattr("voxlibris.ingest.metadata.search_cover", lambda *a, **k: None)
+        response = client.post(f"/projects/{name}/cover/search", follow_redirects=False)
+        assert response.headers["location"].endswith("?cover=introuvable")
+
+
 class TestPagesDOrigine:
     """Un EPUB paginé montre ses pages en regard du texte, dans un cadre isolé."""
 

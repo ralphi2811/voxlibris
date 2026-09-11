@@ -426,13 +426,14 @@ def delete_project(name: str):
 
 # --- Chapitres et métadonnées -------------------------------------------------------
 @app.get("/projects/{name}", response_class=HTMLResponse)
-def show_project(request: Request, name: str):
+def show_project(request: Request, name: str, cover: str = ""):
     project = load_project(name)
     return shell(
         request,
         "project/chapters.html",
         name,
         "chapters",
+        cover_notice=cover,
         tracks=project.tracks(),
         status=project.status(),
         has_cover=project.cover_source is not None,
@@ -468,6 +469,21 @@ async def upload_cover(name: str, file: UploadFile):
     with (project.root / f"cover{suffix}").open("wb") as target:
         shutil.copyfileobj(file.file, target)
     return RedirectResponse(f"/projects/{name}", status_code=303)
+
+
+@app.post("/projects/{name}/cover/search")
+def search_cover_online(name: str):
+    """Cherche la couverture sur Open Library, d'après le titre et l'auteur."""
+    from ..ingest.metadata import search_cover
+
+    project = load_project(name)
+    data = search_cover(project.title, project.author if project.author != "Inconnu" else "")
+    if not data:
+        return RedirectResponse(f"/projects/{name}?cover=introuvable", status_code=303)
+    for old in project.root.glob("cover.*"):
+        old.unlink()
+    (project.root / "cover.jpg").write_bytes(data)
+    return RedirectResponse(f"/projects/{name}?cover=trouvee", status_code=303)
 
 
 @app.get("/projects/{name}/cover")

@@ -97,6 +97,12 @@ def extract_cover(source: Path | None, target: Path) -> Path | None:
 
         pymupdf.open(source)[0].get_pixmap(dpi=200).save(target)
         return target
+    if suffix == ".epub":
+        from .ingest.metadata import cover
+
+        if data := cover(source):
+            target.write_bytes(data)
+            return target
     return None
 
 

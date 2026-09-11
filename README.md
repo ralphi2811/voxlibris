@@ -146,7 +146,10 @@ coup d'œil où en est chaque livre et ce qui reste à faire.
 - **Bibliothèque** : dépôt par glisser-déposer, titre, auteur et langue proposés d'après
   le fichier, état de chaque livre, téléchargement.
 - **Chapitres** : titres corrigés en place — ils sont annoncés à voix haute —, chapitres
-  retirés ou recollés, métadonnées et couverture du livre audio.
+  retirés ou recollés, métadonnées et couverture du livre audio. La
+  couverture est tirée du livre — page de titre d'un PDF, image désignée par un EPUB —,
+  remplaçable par une image à soi, ou cherchée sur Open Library d'un clic (seuls le titre
+  et l'auteur partent sur le réseau, et seulement à la demande).
 - **Relecture** : le texte face à la page d'origine — image du PDF, ou page de l'EPUB
   rendue avec ses polices —, les formes suspectes filtrées par cause, les propositions
   du modèle acceptées ou écartées une à une, rechercher-remplacer.

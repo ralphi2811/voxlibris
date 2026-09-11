@@ -74,16 +74,19 @@
       <button class="btn" type="submit">{{ icons.ic("check") }}Enregistrer</button>
     </form>
 
-    <form class="card pad stack" method="post" action="/projects/{{ name }}/cover" enctype="multipart/form-data">
+    <div class="card pad stack">
       <strong>Couverture</strong>
       <div class="row">
         <span class="cover small" style="background-image: url('/projects/{{ name }}/cover')"></span>
         <div class="stack tight">
-          <span class="muted small">{% if project.cover %}Image déposée.{% elif has_cover %}Tirée du livre d'origine.{% else %}Aucune : le M4B n'en aura pas.{% endif %}</span>
-          <label class="btn sm file-pick">{{ icons.ic("image", 14) }}<span>Remplacer…</span><input type="file" name="file" accept=".jpg,.jpeg,.png" required data-submit></label>
+          <span class="muted small">{% if cover_notice == "introuvable" %}Rien de convaincant en ligne pour ce titre.{% elif cover_notice == "trouvee" %}Trouvée sur Open Library.{% elif project.cover %}Image déposée.{% elif has_cover %}Tirée du livre d'origine.{% else %}Aucune : le M4B n'en aura pas.{% endif %}</span>
+          <div class="row">
+            <form method="post" action="/projects/{{ name }}/cover" enctype="multipart/form-data"><label class="btn sm file-pick">{{ icons.ic("image", 14) }}<span>Remplacer…</span><input type="file" name="file" accept=".jpg,.jpeg,.png" required data-submit></label></form>
+            <form method="post" action="/projects/{{ name }}/cover/search"><button class="btn sm ghost" type="submit" title="titre et auteur envoyés à openlibrary.org">{{ icons.ic("search", 14) }}Chercher en ligne</button></form>
+          </div>
         </div>
       </div>
-    </form>
+    </div>
   </aside>
 </div>
 {% endblock %}
