@@ -754,7 +754,10 @@ def synth_page(request: Request, name: str, chapter: int = 0, cause: str = ""):
         status=project.status(),
         engines=ENGINES,
         catalogues=catalogues(project.language),
-        supports_speed={k: cls.supports_speed for k, cls in BACKENDS.items()},
+        supports_speed={
+            k: (voxtral_is_local() if k == "voxtral" else cls.supports_speed)
+            for k, cls in BACKENDS.items()
+        },
         speed_range=SPEED_RANGE,
         voxtral_local=voxtral_is_local(),
         jobs=queue.list(name, limit=6),

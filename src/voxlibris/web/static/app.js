@@ -137,7 +137,10 @@
   function enginePicker(box) {
     var radios = box.querySelectorAll("input[type=radio]"), list = document.getElementById("synth-voices"),
         hint = document.getElementById("speed-hint");
-    var noSpeed = { voxtral: true };
+    // Les moteurs sans réglage de débit : dits par le serveur, car Voxtral en a un
+    // quand il est servi en local et pas par l'API.
+    var noSpeed = {};
+    ((hint && hint.dataset.nospeed) || "").split(/\s+/).forEach(function (k) { if (k) noSpeed[k] = true; });
     var fill = function () {
       var chosen = box.querySelector("input:checked");
       if (!chosen) return;

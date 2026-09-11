@@ -262,7 +262,8 @@ class VoxtralBackend(Backend):
 
     name = "voxtral"
     default_voice = ""
-    # L'API ne prend aucun réglage de débit : la vitesse restera à 1, quoi qu'on demande.
+    # L'API ne prend aucun réglage de débit ; le serveur local, si. La classe dit le cas
+    # général, l'instance tranche une fois le serveur connu.
     supports_speed = False
 
     def __init__(
@@ -290,14 +291,15 @@ class VoxtralBackend(Backend):
         if chosen is None:
             raise UnknownVoice(self.name, voice, list(self._voices))
         self.voice = chosen
-        self.speed = DEFAULT_SPEED
+        self.supports_speed = self._client.is_local
+        self.speed = speed if self.supports_speed else DEFAULT_SPEED
         self.sample_rate = SAMPLE_RATE
 
     def voices(self) -> list[str]:  # type: ignore[override]
         return sorted(self._voices)
 
     def say(self, text: str) -> np.ndarray:
-        audio, rate = self._client.speak(text, self._voices[self.voice])
+        audio, rate = self._client.speak(text, self._voices[self.voice], speed=self.speed)
         return resample(audio, rate)
 
 

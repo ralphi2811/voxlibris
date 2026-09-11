@@ -149,6 +149,39 @@ class TestMoteur:
         assert BACKENDS["voxtral"].supports_speed is False
         assert all(BACKENDS[name].supports_speed for name in ("xtts", "kokoro", "piper"))
 
+    def test_le_serveur_local_module_le_debit(self, monkeypatch):
+        """Servi chez soi, Voxtral accepte la vitesse ; l'API, jamais."""
+        from voxlibris.tts import backends
+
+        wav = make_wav(0.2, 24000)
+
+        class Local(FakeClient):
+            def __init__(self):
+                super().__init__({"/audio/speech": (wav, "audio/wav")})
+                self.url = "http://voxtral:8600/v1"
+
+            def probe(self):
+                pass
+
+            def voices(self):
+                return [{"name": "fr_female", "id": "fr_female"}]
+
+        client = Local()
+        monkeypatch.setattr("voxlibris.tts.voxtral.Client", lambda *a, **k: client)
+        engine = backends.VoxtralBackend(voice="fr_female", speed=1.3)
+        assert engine.supports_speed and engine.speed == 1.3
+        engine.say("Bonjour.")
+        assert client.calls[-1][1]["speed"] == 1.3
+        assert "voice" in client.calls[-1][1]
+
+        remote = FakeClient({"/audio/speech": (wav, "audio/wav")})
+        remote.voices = lambda: [{"name": "Ana", "id": "v1"}]
+        monkeypatch.setattr("voxlibris.tts.voxtral.Client", lambda *a, **k: remote)
+        engine = backends.VoxtralBackend(voice="Ana", speed=1.3)
+        assert not engine.supports_speed and engine.speed == 1.0
+        engine.say("Bonjour.")
+        assert "speed" not in remote.calls[-1][1]
+
 
 class TestModeration:
     def test_categories_extraites_du_refus(self):

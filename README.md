@@ -105,7 +105,11 @@ cloner quelqu'un sans son accord.
 ### Voxtral chez vous plutôt que chez Mistral
 
 Les poids sont publics, et le serveur de vLLM parle le même protocole que l'API : **seule
-l'adresse change**, le code de voxlibris est le même.
+l'adresse change**, le code de voxlibris est le même. Deux différences tout de même :
+le serveur local **sait moduler le débit**, le réglage de vitesse y agit ; et il **ne
+sait pas cloner une voix** — les poids ouverts n'embarquent pas l'encodeur audio que le
+clonage réclame, et une demande de ce genre fait tomber le moteur. Vingt et une voix
+fournies, dont deux françaises.
 
 ```bash
 uv venv ~/.local/share/voxlibris-vllm/.venv
@@ -136,7 +140,8 @@ les poids, dont `fr_female` et `fr_male`.
 page après page. Il ne démarre pas sans `VOXLIBRIS_MISTRAL_API_KEY`, et n'est jamais choisi
 par défaut. Comptez 0,016 $ pour mille caractères — environ 1,30 $ pour un roman — que
 l'interface annonce avant de lancer la synthèse. L'API n'offre aucun réglage de débit :
-le réglage de vitesse y est sans effet, et le journal le dit plutôt que de l'ignorer.
+le réglage de vitesse y est sans effet, et le journal le dit plutôt que de l'ignorer ;
+servi chez vous, le même moteur l'applique.
 
 ## L'interface
 

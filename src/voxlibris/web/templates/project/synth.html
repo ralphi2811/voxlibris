@@ -124,7 +124,7 @@
       <div class="field">
         <div class="row"><span>Vitesse</span><span class="spacer"></span><output class="mono" id="speed-out">{{ "%.2f"|format(project.speed) }}×</output></div>
         <input type="range" name="speed" min="{{ speed_range[0] }}" max="{{ speed_range[1] }}" step="0.05" value="{{ project.speed }}" data-out="speed-out" data-suffix="×">
-        <span class="muted small" id="speed-hint" data-nospeed="{{ supports_speed|reject('eq', true)|list|length }}">Changer la vitesse refait tout le livre, pour un débit constant.</span>
+        <span class="muted small" id="speed-hint" data-nospeed="{% for k, ok in supports_speed.items() if not ok %}{{ k }} {% endfor %}">Changer la vitesse refait tout le livre, pour un débit constant.</span>
       </div>
       <div class="field"><span>Matériel</span>
         <select class="input" name="device"><option value="">Automatique{% if atelier.online %} · {{ atelier.device }}{% endif %}</option><option value="cuda">Carte graphique</option><option value="cpu">Processeur</option></select>

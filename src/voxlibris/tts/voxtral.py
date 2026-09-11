@@ -17,8 +17,14 @@ Deux points d'attention, développés dans NOTICE.md :
 - **Coût.** 0,016 $ pour mille caractères. Un roman de quatre-vingt mille caractères
   revient à un peu plus d'un dollar, ce que l'interface annonce avant de lancer.
 
-L'API ne propose aucun réglage de vitesse : `speed` est donc sans effet ici, et le dire
-vaut mieux que de laisser croire à un réglage qui n'agirait pas.
+L'API ne propose aucun réglage de vitesse. Le serveur local, lui, l'accepte et
+l'applique — vérifié : à 1,5×, la même phrase dure un tiers de moins — ; on ne
+l'envoie donc qu'à lui, et l'interface dit lequel des deux sait moduler le débit.
+
+Le serveur local expose aussi une entrée de clonage de voix (`ref_audio`), mais les
+poids ouverts n'embarquent pas l'encodeur audio qu'elle réclame : la demande fait
+tomber le moteur vLLM, qui met une minute à revenir. On ne la tente jamais ; le clonage
+n'existe que du côté de l'API, par les voix enregistrées sur le compte.
 """
 
 from __future__ import annotations
@@ -314,7 +320,9 @@ class Client:
                 verdicts.append(sorted(k for k, violated in categories.items() if violated))
         return verdicts
 
-    def speak(self, text: str, voice_id: str, model: str = "") -> tuple[np.ndarray, int]:
+    def speak(
+        self, text: str, voice_id: str, model: str = "", speed: float = 1.0
+    ) -> tuple[np.ndarray, int]:
         # Les deux services servent les mêmes poids sans nommer les choses pareil :
         # l'API de Mistral désigne une voix enregistrée par « voice_id », vLLM un
         # plongement livré avec le modèle par « voice ».
@@ -324,6 +332,9 @@ class Client:
             "response_format": "wav",
             "voice" if self.is_local else "voice_id": voice_id,
         }
+        # Seul le serveur local sait moduler le débit ; l'API ignorerait le champ.
+        if self.is_local and speed != 1.0:
+            payload["speed"] = speed
         try:
             body, kind = self._request("/audio/speech", payload)
         except Refused as refus:
