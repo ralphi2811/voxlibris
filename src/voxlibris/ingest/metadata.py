@@ -140,18 +140,28 @@ def search_cover(title: str, author: str = "", fetch=None) -> bytes | None:
             with urllib.request.urlopen(request, timeout=15) as response:
                 return response.read()
 
-    query = urllib.parse.urlencode({"title": title, **({"author": author} if author else {})})
+    # Le catalogue connaît mal les titres longs des éditions étrangères : on réessaie
+    # sans l'auteur, puis sur le titre raccourci avant le tiret, les deux-points ou la
+    # parenthèse — « Chroniques de Spiderwick - 01 - Le livre magique » répond sur
+    # « Chroniques de Spiderwick ».
+    short = re.split(r"\s+[-–—:]\s+|\s*\(", title, maxsplit=1)[0].strip()
+    attempts: list[tuple[str, str]] = []
+    for candidate in [(title, author), (title, ""), (short, author), (short, "")]:
+        if candidate[0] and candidate not in attempts:
+            attempts.append(candidate)
     try:
-        results = json.loads(fetch(OPEN_LIBRARY.format(query=query)))
-        ids = [doc.get("cover_i") for doc in results.get("docs", []) if doc.get("cover_i")]
-        for cover_id in ids[:3]:
-            try:
-                data = fetch(OPEN_LIBRARY_COVER.format(cover=cover_id))
-            except OSError:
-                continue
-            # Une vraie image, pas le pixel de remplacement des couvertures absentes.
-            if len(data) > 2000:
-                return data
+        for wanted_title, wanted_author in attempts:
+            params = {"title": wanted_title, **({"author": wanted_author} if wanted_author else {})}
+            results = json.loads(fetch(OPEN_LIBRARY.format(query=urllib.parse.urlencode(params))))
+            ids = [doc.get("cover_i") for doc in results.get("docs", []) if doc.get("cover_i")]
+            for cover_id in ids[:3]:
+                try:
+                    data = fetch(OPEN_LIBRARY_COVER.format(cover=cover_id))
+                except OSError:
+                    continue
+                # Une vraie image, pas le pixel de remplacement des couvertures absentes.
+                if len(data) > 2000:
+                    return data
     except (OSError, ValueError):
         return None
     return None

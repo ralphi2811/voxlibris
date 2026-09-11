@@ -124,6 +124,27 @@ class TestCouverture:
         assert "title=Le+Horla" in calls[0] and "author=Maupassant" in calls[0]
         assert calls[1].endswith("/b/id/42-L.jpg?default=false")
 
+    def test_recherche_se_replie_sur_le_titre_court(self):
+        """Titre et auteur, titre seul, titre court et auteur, titre court seul."""
+        calls = []
+
+        def fetch(url):
+            calls.append(url)
+            if "search.json" not in url:
+                return b"J" * 5000
+            if "title=Chroniques+de+Spiderwick&" in url and "author=" not in url:
+                return b'{"docs": [{"cover_i": 7}]}'
+            return b'{"docs": []}'
+
+        title = "Chroniques de Spiderwick - 01 - Le livre magique"
+        assert search_cover(title, "Holly Black", fetch=fetch) == b"J" * 5000
+        searches = [c for c in calls if "search.json" in c]
+        assert len(searches) == 4
+        assert "author=Holly+Black" in searches[0] and "author=" not in searches[1]
+        assert searches[2].startswith(
+            "https://openlibrary.org/search.json?title=Chroniques+de+Spiderwick&author="
+        )
+
     def test_recherche_sans_resultat(self):
         assert search_cover("Le Horla", fetch=lambda url: b'{"docs": []}') is None
         assert search_cover("Le Horla", fetch=lambda url: b"pas du json") is None
