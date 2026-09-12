@@ -108,13 +108,15 @@ class Docker:
         self.url = url.rstrip("/")
         self.timeout = timeout
 
-    def _call(self, method: str, path: str, query: dict | None = None) -> tuple[int, bytes]:
+    def _call(
+        self, method: str, path: str, query: dict | None = None, timeout: float | None = None
+    ) -> tuple[int, bytes]:
         target = f"{self.url}{path}"
         if query:
             target += "?" + urllib.parse.urlencode(query)
         request = urllib.request.Request(target, method=method)
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with urllib.request.urlopen(request, timeout=timeout or self.timeout) as response:
                 return response.status, response.read()
         except urllib.error.HTTPError as error:
             # 304 « déjà dans cet état » est une réponse, pas une erreur.
@@ -142,8 +144,12 @@ class Docker:
     def start(self, ident: str) -> None:
         self._call("POST", f"/containers/{ident}/start")
 
-    def stop(self, ident: str, grace_s: int = 30) -> None:
-        self._call("POST", f"/containers/{ident}/stop", {"t": str(grace_s)})
+    def stop(self, ident: str, grace_s: int = 10) -> None:
+        """Arrête un conteneur. Docker ne répond qu'une fois le processus parti, au plus
+        tard après le délai de grâce : l'appel attend au moins autant, sans quoi la
+        demande expire côté client et le serveur reste debout. Les serveurs de synthèse
+        n'ont rien à sauver : dix secondes de grâce suffisent."""
+        self._call("POST", f"/containers/{ident}/stop", {"t": str(grace_s)}, timeout=grace_s + 20.0)
 
 
 def own_project(docker: Docker) -> str | None:
