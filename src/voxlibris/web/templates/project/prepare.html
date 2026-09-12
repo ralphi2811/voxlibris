@@ -23,7 +23,7 @@
         {% endfor %}
         </tbody>
       </table>
-      <p class="card-foot muted small">Les huit premiers segments du premier chapitre, tels qu'ils partent au moteur. L'annonce de chapitre est le tout premier.</p>
+      <p class="card-foot muted small">Les huit premiers segments du premier chapitre, tels qu'ils partent au moteur.{% if project.announce_chapters %} L'annonce de chapitre est le tout premier.{% endif %}</p>
       {% else %}
       <p class="muted pad">Lancez la préparation pour voir les segments.</p>
       {% endif %}
@@ -51,6 +51,7 @@
         <span class="muted small">Augmentez si la ponctuation ne s'entend pas assez : 1,3 allonge d'un tiers tous les silences. Il n'y a rien à resynthétiser.</span>
       </div>
       <label class="toggle-row"><input type="checkbox" name="announce" {% if project.announce_chapters %}checked{% endif %}><span class="toggle"></span><span>Annoncer les titres de chapitre</span></label>
+      {% if tracks|length == 1 %}<span class="muted small">Ce livre n'a qu'un chapitre : l'annonce se réduit à son titre, sans « Chapitre un ».</span>{% endif %}
       <button class="btn primary" type="submit" {% if job %}disabled{% endif %}>{{ icons.ic("refresh") }}{% if status["segments"] %}Repréparer{% else %}Préparer{% endif %} les segments</button>
       <span class="muted small">Un chapitre dont le texte n'a pas changé garde sa piste. Les autres seront resynthétisés.</span>
     </form>

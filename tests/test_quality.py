@@ -175,3 +175,19 @@ class TestEchantillonDeCalibration:
         from voxlibris.tts.synth import spread
 
         assert spread([1, 2, 3], 12) == [1, 2, 3]
+
+
+class TestPiste:
+    def test_la_piste_ouvre_sur_un_silence(self):
+        """Chaque piste commence par un temps de rien, et le manifeste en tient compte."""
+        from types import SimpleNamespace
+
+        from voxlibris.tts import synth
+
+        segment = synth.Segment(0, "Le gardien du phare notait la couleur du ciel.", 380, 1, "")
+        moteur = SimpleNamespace(say=lambda _: speech(len(segment.text) / 18))
+        result = synth.synthesize_chapter(moteur, [segment], PROFILE)  # type: ignore[arg-type]
+        lead = synth.LEAD_IN_MS / 1000
+        assert result.timing[0]["start"] == pytest.approx(lead, abs=0.01)
+        assert result.duration == pytest.approx(lead + len(segment.text) / 18 + 0.38, abs=0.05)
+        assert not np.any(result.audio[: int(quality.SAMPLE_RATE * lead) - 1])

@@ -19,6 +19,12 @@ from .backends import Backend
 from .quality import SAMPLE_RATE, QualityProfile, Take, calibrate, render_with_fallback
 from .voxtral import Refused
 
+# Silence en tête de chaque piste, en millisecondes. Une piste qui démarre sur le premier
+# phonème surprend l'oreille, et enchaînée à la précédente dans le livre assemblé, elle
+# lui colle : les livres audio du commerce ouvrent chaque chapitre sur une demi-seconde
+# de rien.
+LEAD_IN_MS = 600
+
 
 @dataclass
 class Segment:
@@ -107,17 +113,20 @@ def synthesize_chapter(
     profile: QualityProfile | None = None,
     on_segment: Callable[[Segment, float, int], None] = lambda *_: None,
     reuse: Callable[[str], Take | None] | None = None,
+    lead_in_ms: int = LEAD_IN_MS,
 ) -> ChapterResult:
     """Synthétise et concatène un chapitre, en signalant les segments douteux.
 
     `reuse` propose, pour un texte, une prise déjà faite : elle est alors reprise sans
-    passer par le moteur — voir `previous_takes`.
+    passer par le moteur — voir `previous_takes`. `lead_in_ms` est le silence en tête ;
+    zéro pour un fragment destiné à être recollé dans une piste, ou un échantillon.
     """
     profile = profile or QualityProfile()
-    pieces: list[np.ndarray] = []
+    lead_in = np.zeros(int(SAMPLE_RATE * lead_in_ms / 1000), np.float32)
+    pieces: list[np.ndarray] = [lead_in]
     timing: list[dict] = []
     warnings: list[str] = []
-    cursor = 0
+    cursor = len(lead_in)
 
     for segment in segments:
         reused = reuse(segment.text) if reuse else None
@@ -164,7 +173,7 @@ def synthesize_chapter(
         pieces += [take.audio, pause]
         on_segment(segment, take.duration, take.attempts)
 
-    audio = np.concatenate(pieces) if pieces else np.zeros(0, np.float32)
+    audio = np.concatenate(pieces) if timing else np.zeros(0, np.float32)
     return ChapterResult(audio=audio, timing=timing, warnings=warnings)
 
 

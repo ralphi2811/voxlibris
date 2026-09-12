@@ -397,7 +397,7 @@ def run_sample(project: Project, job: Job, queue: Queue) -> None:
             device = job.params.get("device") or setting("VOXLIBRIS_DEVICE", "cuda")
             wake(backend, job, queue)
             engine = load(backend, voice, device)
-            result = synthesize_chapter(engine, segments, QualityProfile())
+            result = synthesize_chapter(engine, segments, QualityProfile(), lead_in_ms=0)
             name = f"{backend}--{(voice or 'defaut').replace(' ', '_')}.wav"
             result.write(target_dir / name)
             queue.report(job.id, message=f"  → {name}")
@@ -439,7 +439,8 @@ def run_resynth(project: Project, job: Job, queue: Queue) -> None:
     engine = load(project.backend, project.voice, device, project.speed)
     profile = profile_for_voice(engine, load_segments(segments_path), project.calibration_file)
     queue.report(job.id, 0.5, f"ch{number:02d} segment {idx} — « {wanted[0].text[:60]} »")
-    result = synthesize_chapter(engine, wanted, profile)
+    # Sans silence d'entrée : ce fragment se recolle dans la piste, il n'en ouvre pas une.
+    result = synthesize_chapter(engine, wanted, profile, lead_in_ms=0)
 
     audio, _ = sf.read(track, dtype="float32")
     if audio.ndim > 1:

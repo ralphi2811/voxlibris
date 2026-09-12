@@ -65,8 +65,8 @@ class Project:
     # oblige à resynthétiser, les pauses seulement à repréparer les segments.
     speed: float = 1.0
     pause_scale: float = 1.0
-    # Annoncer « Chapitre trois — titre » en tête de chaque piste. On le coupe pour un
-    # recueil dont les titres se suffisent, ou un texte d'un seul tenant.
+    # Annoncer « Chapitre trois — titre » en tête de chaque piste — le titre seul quand
+    # le livre n'a qu'un chapitre. On le coupe pour un recueil dont les titres se suffisent.
     announce_chapters: bool = True
     notes: dict = field(default_factory=dict)
 

@@ -302,6 +302,7 @@ class TestReprise:
 
         from voxlibris import worker
         from voxlibris.tts.quality import SAMPLE_RATE
+        from voxlibris.tts.synth import LEAD_IN_MS
         from voxlibris.web.jobs import Queue
 
         project = make_project(tmp_path / "p")
@@ -363,13 +364,14 @@ class TestReprise:
 
         assert FakeEngine.said == ["Quatre cinq six."]
         rebuilt, _ = sf.read(project.wav_dir / "ch01.wav", dtype="float32")
-        assert len(rebuilt) == 4 * SAMPLE_RATE
-        assert rebuilt[SAMPLE_RATE // 2] == pytest.approx(0.1, abs=1e-3)
-        assert rebuilt[SAMPLE_RATE + 10] == pytest.approx(0.9, abs=1e-3)
-        assert rebuilt[3 * SAMPLE_RATE + 10] == pytest.approx(0.3, abs=1e-3)
+        lead = SAMPLE_RATE * LEAD_IN_MS // 1000  # la piste ouvre sur un silence
+        assert len(rebuilt) == 4 * SAMPLE_RATE + lead
+        assert rebuilt[lead + SAMPLE_RATE // 2] == pytest.approx(0.1, abs=1e-3)
+        assert rebuilt[lead + SAMPLE_RATE + 10] == pytest.approx(0.9, abs=1e-3)
+        assert rebuilt[lead + 3 * SAMPLE_RATE + 10] == pytest.approx(0.3, abs=1e-3)
         after = project.timing(1)
         assert [e["reused"] for e in after] == [True, False, True]
-        assert after[2]["start"] == pytest.approx(3.0, abs=0.05)
+        assert after[2]["start"] == pytest.approx(3.0 + LEAD_IN_MS / 1000, abs=0.05)
         assert "2 segments repris" in queue.get(job.id).log
 
     def test_le_texte_corrige_est_reprepare_avant_la_synthese(self, tmp_path, monkeypatch):

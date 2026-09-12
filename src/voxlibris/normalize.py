@@ -49,7 +49,9 @@ MIN_SEGMENT_CHARS = 30
 PAUSE_SEGMENT = 250  # entre deux fragments d'une même phrase trop longue
 PAUSE_SENTENCE = 380  # entre deux phrases — c'est lui qui fait entendre le point
 PAUSE_PARAGRAPH = 800  # entre deux paragraphes
-PAUSE_TITLE = 1200  # après l'annonce du chapitre
+# « Chapitre trois. » dure une seconde : sans un vrai temps derrière, le texte lui
+# tombe dessus, comme si l'annonce faisait partie de la première phrase.
+PAUSE_TITLE = 2000  # après l'annonce du chapitre
 PAUSE_ELLIPSIS = 450  # remplace des points de suspension en fin de segment
 
 SENTENCE_END = re.compile(r"(?<=[.!?…])\s+(?=[«\"A-ZÀ-ÝŒ—])")
@@ -191,7 +193,12 @@ def defuse_ellipsis(segment: str) -> tuple[str, int]:
     return segment.lstrip(" ,;:").rstrip(), extra
 
 
-def announce(chapter: int, title: str) -> str:
+def announce(chapter: int, title: str, single: bool = False) -> str:
+    """« Chapitre trois. Le titre. » — ou le titre seul quand le livre n'a qu'un chapitre.
+
+    Une nouvelle, un article, un conte : « Chapitre un » en tête dirait un découpage qui
+    n'existe pas. On y lit le titre, s'il en nomme un, et rien d'autre.
+    """
     if chapter == 0:
         return ""
     spoken = f"Chapitre {num2words(chapter, lang='fr')}"
@@ -202,6 +209,8 @@ def announce(chapter: int, title: str) -> str:
     # « Chapitre six. Chapitre sept. » On ne garde donc que les titres qui nomment.
     if not named or re.fullmatch(r"chapitres?\s*\d+", named, re.I):
         named = ""
+    if single:
+        return normalize(f"{named}.") if named else ""
     # Le titre vient de l'en-tête YAML et n'a donc pas traversé normalize() : sans cet
     # appel, l'apostrophe typographique de « Mort d'un personnage » passe telle quelle.
     return normalize(f"{spoken}. {named}." if named else f"{spoken}.")
@@ -229,12 +238,14 @@ def build_chapter_segments(
     paragraphs: list[str],
     announce_chapter: bool = True,
     pause_scale: float = 1.0,
+    single: bool = False,
 ) -> list[dict[str, object]]:
     """Transforme les paragraphes d'un chapitre en segments prêts à synthétiser.
 
     `pause_scale` étire ou resserre tous les silences d'un même facteur. C'est le réglage
     à toucher quand la ponctuation ne s'entend pas assez — il agit sans resynthétiser
-    quoi que ce soit, là où changer la vitesse oblige à tout refaire.
+    quoi que ce soit, là où changer la vitesse oblige à tout refaire. `single` dit que
+    le livre n'a que ce chapitre : l'annonce se réduit alors au titre.
     """
     scale = max(0.25, min(4.0, float(pause_scale)))
 
@@ -242,7 +253,7 @@ def build_chapter_segments(
         return int(round(base * scale))
 
     records: list[dict[str, object]] = []
-    if announce_chapter and (header := announce(chapter, title)):
+    if announce_chapter and (header := announce(chapter, title, single)):
         records.append({"idx": 0, "text": header, "pause_after_ms": silence(PAUSE_TITLE)})
 
     for paragraph in paragraphs:
@@ -281,11 +292,12 @@ def build_segments(
     """Écrit un JSONL de segments par chapitre ; renvoie le compte par chapitre."""
     out_dir.mkdir(parents=True, exist_ok=True)
     counts: dict[int, int] = {}
-    for path in sorted(text_dir.glob("ch*.md")):
+    paths = sorted(text_dir.glob("ch*.md"))
+    for path in paths:
         meta, paragraphs = read_chapter(path)
         chapter = int(meta["chapter"])
         records = build_chapter_segments(
-            chapter, meta["title"], paragraphs, announce_chapters, pause_scale
+            chapter, meta["title"], paragraphs, announce_chapters, pause_scale, len(paths) == 1
         )
         target = out_dir / f"ch{chapter:02d}.jsonl"
         content = "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n"

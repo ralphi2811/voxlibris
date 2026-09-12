@@ -142,6 +142,28 @@ class TestAnnonce:
     def test_vrai_titre_annonce(self):
         assert N.announce(2, "Mort d'un personnage") == "Chapitre deux. Mort d'un personnage."
 
+    def test_un_seul_chapitre_ne_dit_que_son_titre(self, tmp_path):
+        """« Chapitre un » en tête d'une nouvelle dirait un découpage qui n'existe pas."""
+        assert N.announce(1, "Lulu et la Grande Guerre", single=True) == "Lulu et la Grande Guerre."
+        assert N.announce(1, "Chapitre 1", single=True) == ""
+        (tmp_path / "ch01.md").write_text(
+            '---\nchapter: 1\ntitle: "Lulu et la Grande Guerre"\n---\n\nAlors ?\n',
+            encoding="utf-8",
+        )
+        N.build_segments(tmp_path, tmp_path / "seg")
+        first = (tmp_path / "seg" / "ch01.jsonl").read_text(encoding="utf-8").splitlines()[0]
+        assert '"Lulu et la Grande Guerre."' in first and "Chapitre" not in first
+
+    def test_l_annonce_est_suivie_d_un_vrai_temps(self):
+        """« Chapitre trois. » dure une seconde : le texte ne doit pas lui tomber dessus."""
+        records = N.build_chapter_segments(3, "", ["Il faisait beau."])
+        assert records[0]["text"] == "Chapitre trois."
+        assert records[0]["pause_after_ms"] == N.PAUSE_TITLE >= 2000
+        assert (
+            N.build_chapter_segments(3, "", ["Il faisait beau."], announce_chapter=False)[0]["text"]
+            == "Il faisait beau."
+        )
+
 
 class TestSilences:
     def test_les_pauses_suivent_le_facteur(self):
