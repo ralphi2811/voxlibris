@@ -722,3 +722,13 @@ class TestPagesDOrigine:
         response = client.get(f"/projects/{name}/page/1?page=99")
         assert response.status_code == 200
         assert "Seconde page" in response.text
+
+
+class TestStatique:
+    def test_le_script_porte_une_empreinte(self, client):
+        """Une mise à jour du script doit atteindre le navigateur, malgré son cache."""
+        import re
+
+        page = client.get("/").text
+        assert re.search(r'/static/app\.js\?v=[0-9a-f]{10}"', page)
+        assert re.search(r'/static/style\.css\?v=[0-9a-f]{10}"', page)

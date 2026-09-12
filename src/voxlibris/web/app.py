@@ -14,6 +14,7 @@ pour qu'on sache d'un coup d'œil où en est un livre et ce qui reste à faire.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
 import time
@@ -39,6 +40,21 @@ BASE = Path(__file__).parent
 templates = Jinja2Templates(directory=BASE / "templates")
 app = FastAPI(title="voxlibris")
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
+
+
+def static_version() -> str:
+    """Empreinte du script et de la feuille de style, à coller à leur adresse.
+
+    Sans elle, un navigateur garde l'ancien script des jours durant après une mise à
+    jour, sans rien demander au serveur — et l'interface se comporte comme avant.
+    """
+    digest = hashlib.sha1()
+    for name in ("app.js", "style.css"):
+        digest.update((BASE / "static" / name).read_bytes())
+    return digest.hexdigest()[:10]
+
+
+templates.env.globals["static_version"] = static_version()
 
 queue = default_queue()
 
