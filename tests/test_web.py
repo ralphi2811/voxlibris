@@ -550,6 +550,36 @@ class TestClonage:
         monkeypatch.setenv("VOXLIBRIS_OMNIVOICE_BASE_URL", "")
         assert "VOXLIBRIS_OMNIVOICE_BASE_URL" in client.post("/settings/test/omnivoice").text
 
+    def test_un_serveur_absent_n_est_cherche_qu_une_fois_par_visite(self, monkeypatch):
+        from voxlibris.web import app as app_module
+
+        calls = []
+        monkeypatch.setattr(app_module, "zonos2_voices", lambda: calls.append(1) or [])
+        monkeypatch.setattr(app_module, "omnivoice_voices", lambda: ["Marie"])
+        monkeypatch.setattr(app_module, "voxtral_voices", lambda language="": [])
+        first = app_module.catalogues("fr")
+        second = app_module.catalogues("fr")
+        assert first["omnivoice"] == ["Marie"] and second == first
+        assert calls == [1]
+
+        # Un dépôt de voix vide la mémoire : la page suivante redemande.
+        app_module.forget_catalogues()
+        app_module.catalogues("fr")
+        assert calls == [1, 1]
+
+    def test_la_page_voix_ne_demande_les_catalogues_qu_une_fois(
+        self, client, make_epub, monkeypatch
+    ):
+        from voxlibris.web import app as app_module
+
+        name = TestRelecture._create(None, client, make_epub)
+        calls = []
+        monkeypatch.setattr(app_module, "zonos2_voices", lambda: calls.append(1) or ["Marie"])
+        monkeypatch.setattr(app_module, "omnivoice_voices", lambda: [])
+        monkeypatch.setattr(app_module, "voxtral_voices", lambda language="": [])
+        assert "ZONOS2 · Marie" in client.get(f"/projects/{name}/voices").text
+        assert calls == [1]
+
 
 class TestPagesDOrigine:
     """Un EPUB paginé montre ses pages en regard du texte, dans un cadre isolé."""

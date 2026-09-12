@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import re
 import shutil
+import time
 import unicodedata
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
@@ -164,7 +166,59 @@ templates.env.filters["minutes"] = minutes
 templates.env.filters["clock"] = clock
 
 
-_voxtral_cache: dict[str, list[str]] = {}
+# Les catalogues servis par une adresse — Voxtral, ZONOS2, OmniVoice — sont gardés en
+# mémoire un court instant. Une page les demande plusieurs fois, et chercher un serveur
+# arrêté coûte à chaque fois plusieurs secondes de résolution de nom, que le délai de
+# connexion ne borne pas : sans mémoire, la page Voix mettait sept secondes à venir, le
+# serveur ZONOS2 éteint. Trente secondes suffisent pour voir un serveur démarré ; un
+# dépôt ou un retrait de voix vide la mémoire de lui-même.
+CATALOGUE_TTL = 30.0
+# Un serveur qui met plus de trois secondes à lister ses voix est tenu pour absent : la
+# page ne l'attend pas. La synthèse, elle, garde son propre délai, bien plus long.
+PROBE_TIMEOUT = 3.0
+_catalogue_cache: dict[tuple[str, str], tuple[float, list[str]]] = {}
+# Les sondes partent ensemble, dans des fils : la page attend le plus lent, pas la somme,
+# et pas au-delà du délai — une résolution de nom qui traîne finit seule, dans son fil.
+_probes = ThreadPoolExecutor(max_workers=3, thread_name_prefix="catalogue")
+REMOTE_ENGINES = ("voxtral", "zonos2", "omnivoice")
+
+
+def _fetch(engine: str, language: str) -> list[str]:
+    if engine == "voxtral":
+        return voxtral_voices(language)
+    return {"zonos2": zonos2_voices, "omnivoice": omnivoice_voices}[engine]()
+
+
+def remote_catalogues(language: str = "") -> dict[str, list[str]]:
+    """Les catalogues servis par une adresse, mémorisés le temps d'une visite."""
+    now = time.monotonic()
+    found: dict[str, list[str]] = {}
+    pending: dict[str, Future] = {}
+    for engine in REMOTE_ENGINES:
+        hit = _catalogue_cache.get((engine, language))
+        if hit and now - hit[0] < CATALOGUE_TTL:
+            found[engine] = hit[1]
+        else:
+            pending[engine] = _probes.submit(_fetch, engine, language)
+    deadline = time.monotonic() + PROBE_TIMEOUT
+    for engine, future in pending.items():
+        try:
+            names = future.result(timeout=max(0.0, deadline - time.monotonic()))
+        except Exception:  # serveur absent, trop lent, ou clé manquante : liste vide
+            names = []
+        _catalogue_cache[(engine, language)] = (now, names)
+        found[engine] = names
+    return found
+
+
+def remote_voices(engine: str, language: str = "") -> list[str]:
+    """Le catalogue d'un seul moteur servi par une adresse."""
+    return remote_catalogues(language).get(engine, [])
+
+
+def forget_catalogues() -> None:
+    """À appeler quand les voix ont changé sous nos yeux : la prochaine page redemande."""
+    _catalogue_cache.clear()
 
 
 def catalogues(language: str = "") -> dict[str, list[str]]:
@@ -172,27 +226,23 @@ def catalogues(language: str = "") -> dict[str, list[str]]:
 
     XTTS n'en fournit aucune : ses locuteurs ne se lisent qu'une fois les huit
     gigaoctets en mémoire, ce que l'interface n'a pas à faire — d'où les suggestions
-    fixes. Voxtral tient son catalogue derrière une simple requête ; on la mémorise, car
-    elle serait sinon refaite à chaque affichage de page. ZONOS2 et OmniVoice aussi,
-    mais sans mémoire : leurs voix sont les fichiers d'un dossier, qui change sous
-    nos yeux.
+    fixes. Voxtral, ZONOS2 et OmniVoice tiennent le leur derrière une requête, mémorisée
+    un court instant (voir `remote_voices`).
 
     Une absence de clé ou un service en panne ne laissent qu'une liste vide : on retombe
     alors sur la saisie libre, plutôt que d'empêcher l'affichage du projet.
     """
     known = {name: list(cls.catalogue) for name, cls in BACKENDS.items()}
     known["xtts"] = list(XTTS_SUGGESTIONS)
-    if language not in _voxtral_cache:
-        try:
-            from ..tts.voxtral import voice_names
-
-            _voxtral_cache[language] = voice_names(language)
-        except Exception:
-            _voxtral_cache[language] = []
-    known["voxtral"] = _voxtral_cache[language]
-    known["zonos2"] = zonos2_voices()
-    known["omnivoice"] = omnivoice_voices()
+    known.update(remote_catalogues(language))
     return known
+
+
+def voxtral_voices(language: str = "") -> list[str]:
+    """Les voix Voxtral pour une langue — rien sans clé ni serveur local."""
+    from ..tts.voxtral import Client, voice_names
+
+    return voice_names(language, Client(timeout=PROBE_TIMEOUT))
 
 
 # Les voix anglaises livrées avec le serveur, posées dans le dossier au premier départ.
@@ -203,12 +253,12 @@ ZONOS2_SHIPPED = ("AmericanFemale", "AmericanMale", "BritishFemale")
 
 def zonos2_voices() -> list[str]:
     """Les voix que voit le serveur ZONOS2 — rien, s'il n'est pas configuré ou absent."""
-    from ..tts.zonos2 import base_url, voice_names
+    from ..tts.zonos2 import Client, base_url, voice_names
 
     if not base_url():
         return []
     try:
-        names = voice_names()
+        names = voice_names(Client(timeout=PROBE_TIMEOUT))
     except Exception:
         return []
     return sorted(names, key=lambda n: (n in ZONOS2_SHIPPED, n.lower()))
@@ -216,12 +266,12 @@ def zonos2_voices() -> list[str]:
 
 def omnivoice_voices() -> list[str]:
     """Les voix que voit le serveur OmniVoice — rien, s'il n'est pas configuré ou absent."""
-    from ..tts.omnivoice import base_url, voice_names
+    from ..tts.omnivoice import Client, base_url, voice_names
 
     if not base_url():
         return []
     try:
-        names = voice_names()
+        names = voice_names(Client(timeout=PROBE_TIMEOUT))
     except Exception:
         return []
     return sorted(names, key=lambda n: (n in ZONOS2_SHIPPED, n.lower()))
@@ -252,7 +302,7 @@ def voxtral_is_local() -> bool:
 
 
 def sample_candidates(
-    language: str = "", project: Project | None = None
+    language: str = "", project: Project | None = None, known: dict[str, list[str]] | None = None
 ) -> list[tuple[str, str, str, bool]]:
     """Voix à proposer au banc d'essai : (moteur, voix, intitulé, cochée d'avance).
 
@@ -268,7 +318,7 @@ def sample_candidates(
         ("xtts", voice, f"XTTS · {voice}", fresh and index < 2 and ("xtts", voice) not in done)
         for index, voice in enumerate(XTTS_SUGGESTIONS)
     ]
-    for backend, voices in catalogues(language).items():
+    for backend, voices in (known or catalogues(language)).items():
         if backend == "xtts":
             continue
         for voice in voices[:PER_BACKEND]:
@@ -774,6 +824,7 @@ def prepare_page(request: Request, name: str):
 def voices_page(request: Request, name: str, cloning: str = ""):
     project = load_project(name)
     available = atelier.status(workspace()).get("engines") or {}
+    known = catalogues(project.language)
     return shell(
         request,
         "project/voices.html",
@@ -781,8 +832,8 @@ def voices_page(request: Request, name: str, cloning: str = ""):
         "voices",
         engines=ENGINES,
         available=available,
-        catalogues=catalogues(project.language),
-        candidates=sample_candidates(project.language, project),
+        catalogues=known,
+        candidates=sample_candidates(project.language, project, known),
         samples=samples_of(project),
         voxtral_local=voxtral_is_local(),
         voice_samples=voice_samples(),
@@ -815,6 +866,7 @@ async def upload_voice(name: str, file: UploadFile, label: str = Form("")):
         old.unlink()
     with (folder / f"{stem}{suffix}").open("wb") as target:
         shutil.copyfileobj(file.file, target)
+    forget_catalogues()
     return RedirectResponse(f"/projects/{name}/voices?cloning=deposee", status_code=303)
 
 
@@ -829,6 +881,7 @@ def delete_voice(name: str, sample: str = Form(...)):
     target = voices_dir() / Path(sample).name
     if target.is_file():
         target.unlink()
+    forget_catalogues()
     return RedirectResponse(f"/projects/{name}/voices", status_code=303)
 
 

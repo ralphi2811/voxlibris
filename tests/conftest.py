@@ -7,6 +7,7 @@ hermétiques, reproductibles, et sans la moindre question de droits.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,9 @@ def donnees_isolees(tmp_path_factory, monkeypatch):
     """Aucun test ne lit les réglages ni les projets de la machine : le dossier des
     données est un répertoire temporaire, vide, pour chaque test."""
     monkeypatch.setenv("VOXLIBRIS_DATA", str(tmp_path_factory.mktemp("data")))
+    # Les catalogues de voix mémorisés par l'interface ne survivent pas à un test.
+    if web_app := sys.modules.get("voxlibris.web.app"):
+        web_app.forget_catalogues()
 
 
 def _chapter_html(title: str, paragraphs: int = 3) -> str:
