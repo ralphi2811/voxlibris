@@ -123,11 +123,14 @@ def api_key(env: dict[str, str] | None = None) -> str:
 
 
 def base_url(env: dict[str, str] | None = None) -> str:
-    raw = (
-        env.get("VOXLIBRIS_MISTRAL_BASE_URL", "")
-        if env is not None
-        else setting("VOXLIBRIS_MISTRAL_BASE_URL")
-    )
+    """Le réglage ; sinon le service Compose local quand son conteneur existe ; sinon
+    l'API de Mistral."""
+    if env is not None:
+        raw = env.get("VOXLIBRIS_MISTRAL_BASE_URL", "")
+    else:
+        from ..concierge import implied_url
+
+        raw = setting("VOXLIBRIS_MISTRAL_BASE_URL") or implied_url("voxtral")
     return (raw or DEFAULT_BASE_URL).rstrip("/")
 
 

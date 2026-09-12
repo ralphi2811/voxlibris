@@ -11,15 +11,19 @@
 <div class="grid engines">
   {% for key, e in engines.items() %}
   {% set ok = available.get(key) if available else none %}
+  {% set sleeping = served and served.get(key, {}).get("state") == "stopped" %}
+  {# Un moteur que l'atelier n'a pas — ni embarqué, ni servi, ni configuré — n'est pas proposé. #}
+  {% if ok is none or ok %}
   <div class="card pad engine {% if project.backend == key %}chosen{% endif %}">
     <div class="row"><strong>{{ e.label }}</strong><span class="spacer"></span>
       {% if ok is none %}<span class="chip muted">{{ e.where }}</span>
-      {% elif ok %}<span class="chip ok">{{ e.where }}</span>
-      {% else %}<span class="chip bad">absent de l'atelier</span>{% endif %}
+      {% elif sleeping %}<span class="chip warn" title="Le serveur est arrêté ; l'atelier le réveille pour la tâche qui le demande">{{ e.where }} · en veille</span>
+      {% else %}<span class="chip ok">{{ e.where }}</span>{% endif %}
     </div>
     <span class="muted small">{{ e.blurb }}</span>
     <div class="chips"><span class="chip {{ e.licence_tone }}">{{ e.licence }}</span>{% if key == "voxtral" %}<span class="chip {% if voxtral_local %}ok{% else %}warn{% endif %}">{% if voxtral_local %}servi en local{% else %}API · texte envoyé{% endif %}</span>{% endif %}{% if key in ("zonos2", "omnivoice") %}<span class="chip ok">clonage de voix</span>{% endif %}</div>
   </div>
+  {% endif %}
   {% endfor %}
 </div>
 
@@ -58,7 +62,7 @@
       </div>
       <div class="field"><span>Une autre voix</span>
         <div class="row">
-          <select class="input" name="extra_backend" id="extra-backend">{% for key, e in engines.items() %}<option value="{{ key }}">{{ e.label }}</option>{% endfor %}</select>
+          <select class="input" name="extra_backend" id="extra-backend">{% for key, e in engines.items() %}{% if not available or available.get(key) %}<option value="{{ key }}">{{ e.label }}</option>{% endif %}{% endfor %}</select>
           <input class="input grow" type="text" name="extra_voice" id="extra-voice" list="voice-options" placeholder="nom de la voix">
           <datalist id="voice-options"></datalist>
         </div>
@@ -75,7 +79,7 @@
     </div>
 
     <form class="card pad stack" method="post" action="/projects/{{ name }}/voices/clone" enctype="multipart/form-data">
-      <div class="row"><strong>Cloner une voix</strong><span class="spacer"></span><span class="chip {% if available and available.get("zonos2") %}ok{% else %}muted{% endif %}">ZONOS2</span><span class="chip {% if available and available.get("omnivoice") %}ok{% else %}muted{% endif %}">OmniVoice</span></div>
+      <div class="row"><strong>Cloner une voix</strong><span class="spacer"></span>{% for k, label in (("zonos2", "ZONOS2"), ("omnivoice", "OmniVoice")) %}{% if available and available.get(k) %}<span class="chip {% if served and served.get(k, {}).get("state") == "stopped" %}warn{% else %}ok{% endif %}">{{ label }}</span>{% endif %}{% endfor %}</div>
       {% if cloning == "deposee" %}<span class="chip ok">extrait déposé — la voix est prête</span>{% endif %}
       {% if voice_samples %}
       <div class="stack tight">
@@ -98,7 +102,7 @@
     <form class="card pad stack" method="post" action="/projects/{{ name }}/voice">
       <strong>Ou saisir directement</strong>
       <div class="row">
-        <select class="input" name="backend" id="direct-backend">{% for key, e in engines.items() %}<option value="{{ key }}" {% if project.backend == key %}selected{% endif %}>{{ e.label }}</option>{% endfor %}</select>
+        <select class="input" name="backend" id="direct-backend">{% for key, e in engines.items() %}{% if not available or available.get(key) or project.backend == key %}<option value="{{ key }}" {% if project.backend == key %}selected{% endif %}>{{ e.label }}</option>{% endif %}{% endfor %}</select>
         <input class="input grow" type="text" name="voice" id="direct-voice" list="voice-options-direct" value="{{ project.voice or '' }}" placeholder="voix">
         <datalist id="voice-options-direct"></datalist>
       </div>

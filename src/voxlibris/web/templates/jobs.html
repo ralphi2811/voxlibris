@@ -14,7 +14,7 @@
     {% for j in jobs %}
     <tr>
       <td class="mono muted">{{ j.id }}</td>
-      {% if not scope %}<td><a href="/projects/{{ j.project }}">{{ j.project }}</a></td>{% endif %}
+      {% if not scope %}<td>{% if j.project == "atelier" %}<span class="muted">atelier</span>{% else %}<a href="/projects/{{ j.project }}">{{ j.project }}</a>{% endif %}</td>{% endif %}
       <td>{{ j.kind }}</td>
       <td><span class="chip {% if j.state == 'terminé' %}ok{% elif j.state == 'échoué' %}bad{% elif j.state == 'en cours' %}accent{% elif j.state == 'arrêtée' %}warn{% else %}muted{% endif %}">{{ j.state }}</span></td>
       <td class="ellipsis" title="{{ j.message }}">{{ j.message }}</td>

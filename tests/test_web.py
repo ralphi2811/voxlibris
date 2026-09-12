@@ -581,6 +581,66 @@ class TestClonage:
         assert calls == [1]
 
 
+class TestConcierge:
+    """Ce que l'interface montre des serveurs que l'atelier réveille et endort."""
+
+    def _pulse(self, monkeypatch, served, engines=None):
+        from voxlibris import atelier
+
+        pulse = {
+            "online": True,
+            "age": 1,
+            "busy": None,
+            "device": "cuda",
+            "gpu": "RTX",
+            "docker": True,
+            "served": served,
+            "idle_minutes": 15,
+            "engines": engines
+            or {
+                "xtts": True,
+                "kokoro": True,
+                "piper": True,
+                "voxtral": False,
+                "zonos2": True,
+                "omnivoice": False,
+            },
+        }
+        monkeypatch.setattr(atelier, "status", lambda root: pulse)
+
+    def test_les_moteurs_absents_ne_sont_pas_proposes(self, client, make_epub, monkeypatch):
+        from voxlibris.web import app as app_module
+
+        name = TestRelecture._create(None, client, make_epub)
+        self._pulse(monkeypatch, {"zonos2": {"state": "stopped", "name": "voxlibris-zonos2-1"}})
+        monkeypatch.setattr(
+            app_module, "served_state", lambda e: "stopped" if e == "zonos2" else ""
+        )
+        monkeypatch.setattr(app_module, "voxtral_voices", lambda language="": [])
+        monkeypatch.setattr(app_module, "omnivoice_voices", lambda: [])
+        (app_module.voices_dir()).mkdir(parents=True)
+        (app_module.voices_dir() / "marie.wav").write_bytes(b"RIFF")
+        page = client.get(f"/projects/{name}/voices").text
+        assert "en veille" in page and "ZONOS2 · marie" in page
+        # Ni tuile, ni ligne au banc, ni option de saisie pour les moteurs que l'atelier n'a pas.
+        assert "Voxtral TTS" not in page and 'value="omnivoice"' not in page
+        assert "OmniVoice · " not in page and "XTTS-v2" in page
+
+    def test_liberer_la_carte_depose_une_tache(self, client, monkeypatch):
+        from voxlibris.web import app as app_module
+
+        self._pulse(monkeypatch, {"zonos2": {"state": "running", "name": "voxlibris-zonos2-1"}})
+        assert "Libérer la carte" in client.get("/settings").text
+        response = client.post("/atelier/release", follow_redirects=False)
+        assert response.status_code == 303
+        job = app_module.queue.active("atelier")
+        assert job is not None and job.kind == "release"
+        # Une seconde demande n'en dépose pas une autre.
+        client.post("/atelier/release", follow_redirects=False)
+        assert len([j for j in app_module.queue.list("atelier") if j.kind == "release"]) == 1
+        assert "atelier" in client.get("/jobs").text
+
+
 class TestPagesDOrigine:
     """Un EPUB paginé montre ses pages en regard du texte, dans un cadre isolé."""
 

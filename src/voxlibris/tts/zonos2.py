@@ -31,6 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ..concierge import implied_url
 from ..config import setting
 
 DEFAULT_PORT = 1919
@@ -75,12 +76,10 @@ class Zonos2Error(RuntimeError):
 
 
 def base_url(env: dict[str, str] | None = None) -> str:
-    raw = (
-        env.get("VOXLIBRIS_ZONOS2_BASE_URL", "")
-        if env is not None
-        else setting("VOXLIBRIS_ZONOS2_BASE_URL")
-    )
-    return raw.strip().rstrip("/")
+    """Le réglage, sinon l'adresse du service Compose quand son conteneur existe."""
+    if env is not None:
+        return env.get("VOXLIBRIS_ZONOS2_BASE_URL", "").strip().rstrip("/")
+    return setting("VOXLIBRIS_ZONOS2_BASE_URL").strip().rstrip("/") or implied_url("zonos2")
 
 
 def language_code(language: str) -> str | None:

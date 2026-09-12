@@ -27,6 +27,7 @@ import urllib.request
 
 import numpy as np
 
+from ..concierge import implied_url
 from ..config import setting
 from .zonos2 import AUDIO_EXTENSIONS, in_container
 
@@ -41,12 +42,10 @@ class OmnivoiceError(RuntimeError):
 
 
 def base_url(env: dict[str, str] | None = None) -> str:
-    raw = (
-        env.get("VOXLIBRIS_OMNIVOICE_BASE_URL", "")
-        if env is not None
-        else setting("VOXLIBRIS_OMNIVOICE_BASE_URL")
-    )
-    return raw.strip().rstrip("/")
+    """Le réglage, sinon l'adresse du service Compose quand son conteneur existe."""
+    if env is not None:
+        return env.get("VOXLIBRIS_OMNIVOICE_BASE_URL", "").strip().rstrip("/")
+    return setting("VOXLIBRIS_OMNIVOICE_BASE_URL").strip().rstrip("/") or implied_url("omnivoice")
 
 
 def language_code(language: str) -> str | None:

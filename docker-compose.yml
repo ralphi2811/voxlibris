@@ -54,6 +54,25 @@ services:
       VOXLIBRIS_DATA: /data
       # « cuda » quand la surcharge GPU est chargée, « cpu » sinon.
       VOXLIBRIS_DEVICE: ${VOXLIBRIS_DEVICE:-cpu}
+      # Le relais ci-dessous ; vide, l'atelier ne réveille ni n'endort aucun serveur.
+      VOXLIBRIS_DOCKER_URL: ${VOXLIBRIS_DOCKER_URL:-http://docker-proxy:2375}
+
+  # Le concierge de la carte graphique (src/voxlibris/concierge.py) parle à Docker par
+  # ce relais : lister les conteneurs du projet, en démarrer un, en arrêter un — et rien
+  # d'autre, là où la socket brute vaudrait root sur la machine. Les règles sont les
+  # nôtres, docker/docker-proxy.cfg, quatre requêtes autorisées. Grâce à lui, déclarez
+  # tous les profils que vous voulez : l'atelier réveille le serveur qu'une tâche
+  # demande, endort ceux qui ne tiendraient pas à côté, rend la carte après un quart
+  # d'heure sans rien faire (réglable dans les Réglages).
+  docker-proxy:
+    image: haproxy:3.2-alpine
+    # La socket appartient à root : le relais tourne sous root, dans son seul conteneur,
+    # sans rien d'autre que ces quatre règles à exécuter.
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/docker-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    restart: unless-stopped
 
   # Voxtral TTS chez vous. Facultatif — profil « voxtral » — et exigeant : 16 Go de
   # mémoire vidéo, 8 Go de poids, un jeton Hugging Face (HF_TOKEN dans le .env) dont

@@ -37,6 +37,7 @@ EDITABLE = (
     "VOXLIBRIS_OMNIVOICE_BASE_URL",
     "COQUI_TOS_AGREED",
     "VOXLIBRIS_DEVICE",
+    "VOXLIBRIS_GPU_IDLE_MIN",
 )
 
 # Ceux-là ne s'affichent jamais en clair.

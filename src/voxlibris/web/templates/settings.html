@@ -58,7 +58,10 @@
         <option value="cuda" {% if settings["VOXLIBRIS_DEVICE"].value == "cuda" %}selected{% endif %}>Carte graphique</option>
         <option value="cpu" {% if settings["VOXLIBRIS_DEVICE"].value == "cpu" %}selected{% endif %}>Processeur</option>
       </select></label>
-    {% if atelier.online %}<div class="chips">{% for e, ok in atelier.engines.items() %}<span class="chip {% if ok %}ok{% else %}muted{% endif %}">{{ e }}</span>{% endfor %}{% if atelier.gpu %}<span class="chip info">{{ atelier.gpu }}</span>{% endif %}</div>{% endif %}
+    {{ field("VOXLIBRIS_GPU_IDLE_MIN", "Rendre la carte graphique après (minutes)", "15 — 0 pour ne jamais endormir les serveurs") }}
+    <span class="muted small">Les serveurs de synthèse — Voxtral, ZONOS2, OmniVoice — sont réveillés par la tâche qui les demande, et endormis passé ce délai sans rien faire.{% if atelier.online and not atelier.docker %} Sans le relais Docker du Compose, l'atelier ne réveille ni n'endort rien.{% endif %}</span>
+    {% if atelier.online %}<div class="chips">{% for e, ok in atelier.engines.items() %}{% set st = atelier.served.get(e, {}).get("state") if atelier.served else none %}<span class="chip {% if st == "stopped" %}warn{% elif ok %}ok{% else %}muted{% endif %}">{{ e }}{% if st == "running" %} · prêt{% elif st == "stopped" %} · en veille{% endif %}</span>{% endfor %}{% if atelier.gpu %}<span class="chip info">{{ atelier.gpu }}</span>{% endif %}</div>{% endif %}
+    {% if atelier.online and atelier.docker %}<div class="row"><button class="btn sm" type="submit" form="release-form">{{ icons.ic("gpu", 14) }}Libérer la carte maintenant</button>{% if atelier.release_in_s %}<span class="muted small">sinon dans {{ (atelier.release_in_s / 60) | round | int }} min</span>{% endif %}{% if released %}<span class="chip ok">demandé à l'atelier</span>{% endif %}</div>{% endif %}
   </section>
 
   <section class="card pad stack">
@@ -69,4 +72,5 @@
 
   <div class="row full"><button class="btn primary" type="submit">{{ icons.ic("check") }}Enregistrer les réglages</button><span class="muted small">Une clé masquée n'est pas réécrite ; videz le champ pour la retirer.</span></div>
 </form>
+<form id="release-form" method="post" action="/atelier/release"></form>
 {% endblock %}

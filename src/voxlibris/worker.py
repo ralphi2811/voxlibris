@@ -11,6 +11,7 @@ où celle-ci en pèse huit gigaoctets.
 
 from __future__ import annotations
 
+import gc
 import json
 import logging
 import signal
@@ -19,6 +20,7 @@ from pathlib import Path
 
 from . import atelier
 from .assemble import build
+from .concierge import Concierge
 from .config import setting
 from .normalize import build_segments
 from .project import Project
@@ -28,12 +30,43 @@ logger = logging.getLogger("voxlibris.worker")
 IDLE_SLEEP = 1.0
 
 _stop = False
+# Le concierge de la carte graphique, posé au démarrage ; inerte sans relais Docker.
+CONCIERGE: Concierge | None = None
 
 
 def _request_stop(*_) -> None:
     global _stop
     _stop = True
     logger.info("arrêt demandé : la tâche en cours va s'achever avant de rendre la main")
+
+
+def free_gpu() -> None:
+    """Rend à la carte ce qu'un moteur embarqué y a laissé : après une tâche, avant un
+    réveil. Le modèle lui-même est déjà hors de portée ; reste le cache de PyTorch."""
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
+def wake(backend: str, job: Job, queue: Queue) -> None:
+    """Avant de charger un moteur : son serveur répond, et la carte lui laisse la place."""
+    if CONCIERGE is not None:
+        CONCIERGE.ensure(backend, lambda line: queue.report(job.id, message=line), free=free_gpu)
+
+
+def run_release(project: Project | None, job: Job, queue: Queue) -> None:
+    """Rend la carte tout de suite, sans attendre le délai d'inactivité."""
+    if CONCIERGE is None or not CONCIERGE.active:
+        queue.report(job.id, 1.0, "pas de relais Docker : rien à endormir")
+        return
+    stopped = CONCIERGE.release(lambda line: queue.report(job.id, message=line))
+    free_gpu()
+    queue.report(job.id, 1.0, "carte rendue" if stopped else "aucun serveur ne tournait")
 
 
 def run_normalize(project: Project, job: Job, queue: Queue) -> None:
@@ -115,6 +148,7 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
         project.speed = float(wanted)
 
     queue.report(job.id, 0.0, f"chargement du moteur {backend} à {project.speed:g}×")
+    wake(backend, job, queue)
     engine = load(backend, voice, device, project.speed)
     chosen = getattr(engine, "voice", backend)
 
@@ -311,6 +345,7 @@ def run_sample(project: Project, job: Job, queue: Queue) -> None:
         queue.report(job.id, index / len(choices), f"{backend} / {voice}")
         try:
             device = job.params.get("device") or setting("VOXLIBRIS_DEVICE", "cuda")
+            wake(backend, job, queue)
             engine = load(backend, voice, device)
             result = synthesize_chapter(engine, segments, QualityProfile())
             name = f"{backend}--{(voice or 'defaut').replace(' ', '_')}.wav"
@@ -350,6 +385,7 @@ def run_resynth(project: Project, job: Job, queue: Queue) -> None:
 
     device = job.params.get("device") or setting("VOXLIBRIS_DEVICE", "cuda")
     queue.report(job.id, 0.1, f"chargement du moteur {project.backend} à {project.speed:g}×")
+    wake(project.backend, job, queue)
     engine = load(project.backend, project.voice, device, project.speed)
     profile = profile_for_voice(engine, load_segments(segments_path), project.calibration_file)
     queue.report(job.id, 0.5, f"ch{number:02d} segment {idx} — « {wanted[0].text[:60]} »")
@@ -409,14 +445,18 @@ HANDLERS = {
     "sample": run_sample,
     "resynth": run_resynth,
     "assemble": run_assemble,
+    "release": run_release,
 }
+# Les tâches qui ne portent sur aucun livre.
+PROJECTLESS = ("release",)
 
 
 def execute(job: Job, queue: Queue, root: Path) -> None:
     handler = HANDLERS.get(job.kind)
     if handler is None:
         raise RuntimeError(f"Tâche inconnue : {job.kind}")
-    handler(Project.load(root / job.project), job, queue)
+    project = None if job.kind in PROJECTLESS else Project.load(root / job.project)
+    handler(project, job, queue)
 
 
 def main() -> None:
@@ -430,7 +470,9 @@ def main() -> None:
     # « en cours » a été interrompue par l'arrêt précédent, quel que soit son âge.
     if stale := queue.cancel_stale(older_than=0):
         logger.info("%d tâche(s) interrompue(s) remise(s) à plat", stale)
-    pulse = atelier.Pulse(root)
+    global CONCIERGE
+    CONCIERGE = Concierge.from_env()
+    pulse = atelier.Pulse(root, CONCIERGE)
     pulse.start()
     logger.info("atelier prêt, projets dans %s", root)
 
@@ -454,6 +496,10 @@ def main() -> None:
             logger.info("tâche %d terminée en %.0f s", job.id, queue.get(job.id).running_for)
         finally:
             pulse.busy = None
+            # Le moteur de la tâche est libéré ; ce qui reste sur la carte ne sert plus.
+            free_gpu()
+            if CONCIERGE is not None:
+                CONCIERGE.touch()
     pulse.stop()
 
 

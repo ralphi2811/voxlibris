@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import atelier, pages
+from ..concierge import served_state
 from ..config import EDITABLE, SECRETS, origin, setting, voices_dir, write_settings
 from ..document import Chapter
 from ..ingest import ingest as ingest_book
@@ -184,6 +185,10 @@ REMOTE_ENGINES = ("voxtral", "zonos2", "omnivoice")
 
 
 def _fetch(engine: str, language: str) -> list[str]:
+    # Un serveur en veille ne se sonde pas : on le réveillera pour la tâche. Ses voix,
+    # pour les cloneurs, sont les fichiers du dossier — on les connaît sans lui.
+    if served_state(engine) == "stopped":
+        return sample_labels() if engine in ("zonos2", "omnivoice") else []
     if engine == "voxtral":
         return voxtral_voices(language)
     return {"zonos2": zonos2_voices, "omnivoice": omnivoice_voices}[engine]()
@@ -274,6 +279,12 @@ def omnivoice_voices() -> list[str]:
         names = voice_names(Client(timeout=PROBE_TIMEOUT))
     except Exception:
         return []
+    return sorted(names, key=lambda n: (n in ZONOS2_SHIPPED, n.lower()))
+
+
+def sample_labels() -> list[str]:
+    """Les intitulés que les serveurs de clonage donneront aux extraits déposés."""
+    names = [v["label"] for v in voice_samples()]
     return sorted(names, key=lambda n: (n in ZONOS2_SHIPPED, n.lower()))
 
 
@@ -823,7 +834,8 @@ def prepare_page(request: Request, name: str):
 @app.get("/projects/{name}/voices", response_class=HTMLResponse)
 def voices_page(request: Request, name: str, cloning: str = ""):
     project = load_project(name)
-    available = atelier.status(workspace()).get("engines") or {}
+    pulse = atelier.status(workspace())
+    available = pulse.get("engines") or {}
     known = catalogues(project.language)
     return shell(
         request,
@@ -832,6 +844,7 @@ def voices_page(request: Request, name: str, cloning: str = ""):
         "voices",
         engines=ENGINES,
         available=available,
+        served=pulse.get("served") or {},
         catalogues=known,
         candidates=sample_candidates(project.language, project, known),
         samples=samples_of(project),
@@ -1119,12 +1132,13 @@ def settings_view() -> dict[str, dict[str, str]]:
 
 
 @app.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request, saved: int = 0):
+def settings_page(request: Request, saved: int = 0, released: int = 0):
     return shell(
         request,
         "settings.html",
         settings=settings_view(),
         saved=bool(saved),
+        released=bool(released),
         data_dir=str(workspace()),
         nav="settings",
     )
@@ -1150,6 +1164,18 @@ async def save_settings(request: Request):
             )
     write_settings(values)
     return RedirectResponse("/settings?saved=1", status_code=303)
+
+
+@app.post("/atelier/release")
+def release_gpu():
+    """Rend la carte graphique tout de suite : les serveurs de synthèse sont endormis.
+
+    C'est une tâche comme une autre, exécutée par l'atelier — seul lui parle à Docker —
+    et qui attend donc son tour derrière une synthèse en cours.
+    """
+    if queue.active("atelier") is None:
+        queue.enqueue("atelier", "release")
+    return RedirectResponse("/settings?released=1", status_code=303)
 
 
 @app.post("/settings/test/{service}", response_class=HTMLResponse)

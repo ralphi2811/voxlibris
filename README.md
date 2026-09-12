@@ -242,6 +242,27 @@ un Ollama installé sur la machine depuis les conteneurs, l'adresse est
 `http://host.docker.internal:11434/v1` — de même, `…:8600/v1` pour un vLLM lancé à la
 main sur l'hôte.
 
+### Le concierge de la carte graphique
+
+Déclarez tous les profils que vous voulez, ensemble :
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile omnivoice --profile zonos2 up -d
+```
+
+Ils ne tiennent pas tous sur une carte à la fois, et ce n'est pas grave : l'atelier
+**réveille le serveur qu'une tâche demande, endort ceux qui ne tiendraient pas à côté**,
+et rend la carte après un quart d'heure sans rien faire — réglable dans les Réglages,
+zéro pour jamais, avec un bouton pour la rendre tout de suite. Un serveur en veille reste
+proposé sur la page Voix ; le réveil se paie au début de la tâche, deux à trois minutes
+pour ZONOS2, moins d'une pour OmniVoice, et se lit dans la progression. Les adresses des
+services Compose vont alors de soi, rien à saisir dans les Réglages.
+
+Pour cela, l'atelier parle à Docker par le service `docker-proxy` du Compose, un relais
+dont les règles, `docker/docker-proxy.cfg`, n'ouvrent que quatre requêtes — lister,
+inspecter, démarrer, arrêter — là où la socket brute vaudrait root sur la machine. Sans lui, `VOXLIBRIS_DOCKER_URL` vide, rien n'est réveillé ni
+endormi : l'atelier voit ce qui répond, comme un serveur lancé à la main.
+
 **Un pare-feu sur l'hôte bloque ces adresses** : `ufw`, en particulier, rejette ce qui
 arrive des ponts Docker, et le conteneur voit un « timed out » plutôt qu'un refus. Il
 faut ouvrir le port aux réseaux Docker, et à eux seuls :
