@@ -23,7 +23,7 @@ from .assemble import build
 from .concierge import Concierge
 from .config import setting
 from .normalize import build_segments
-from .project import Project
+from .project import Project, read_stamp, write_stamp
 from .web.jobs import Cancelled, Job, Queue, default_queue, workspace
 
 logger = logging.getLogger("voxlibris.worker")
@@ -88,8 +88,8 @@ def run_normalize(project: Project, job: Job, queue: Queue) -> None:
     )
 
 
-def track_is_current(track: Path, segments: Path) -> bool:
-    """Vrai si la piste dit exactement le texte des segments.
+def track_is_current(track: Path, segments: Path, signature: str = "") -> bool:
+    """Vrai si la piste dit exactement le texte des segments, de la voix demandée.
 
     Cas vécu : un passage corrigé dans le texte, les segments repréparés, et la synthèse
     qui répond « déjà synthétisé » en gardant la piste d'avant — la correction n'a jamais
@@ -98,6 +98,10 @@ def track_is_current(track: Path, segments: Path) -> bool:
     """
     manifest = track.with_suffix(".timing.json")
     if not (track.exists() and manifest.exists() and segments.exists()):
+        return False
+    # Une piste notée d'une autre voix n'est jamais à jour. Une piste sans note — d'avant
+    # cette note — est jugée sur son texte seul, et sur ce que le projet sait d'elle.
+    if signature and (stamped := read_stamp(track)) and stamped != signature:
         return False
     try:
         timing = json.loads(manifest.read_text(encoding="utf-8"))
@@ -111,9 +115,45 @@ def track_is_current(track: Path, segments: Path) -> bool:
     return bool(said) and said == wanted
 
 
+def server_errors() -> tuple[type[Exception], ...]:
+    """Les erreurs qui disent « le serveur de synthèse ne répond plus », pas « ce texte
+    ne passe pas » : celles-là valent un réveil et un nouvel essai."""
+    from .tts.omnivoice import OmnivoiceError
+    from .tts.voxtral import VoxtralError
+    from .tts.zonos2 import Zonos2Error
+
+    return (OmnivoiceError, Zonos2Error, VoxtralError)
+
+
+def synthesize_with_recovery(engine, segments, profile, check_cancel, reuse, backend, job, queue):
+    """Un chapitre, avec une seconde chance si le serveur disparaît en route.
+
+    Vécu : un serveur OmniVoice parti sans un mot au milieu du chapitre six, et toute la
+    synthèse en échec pour une requête. Le concierge le réveille, et le chapitre repart
+    du début — la piste n'est écrite qu'une fois complète, rien n'est à moitié fait.
+    """
+    from .tts.synth import synthesize_chapter
+
+    for attempt in (1, 2):
+        try:
+            return synthesize_chapter(
+                engine, segments, profile, on_segment=check_cancel, reuse=reuse
+            )
+        except server_errors() as error:
+            if attempt == 2 or CONCIERGE is None or not CONCIERGE.active:
+                raise
+            queue.report(
+                job.id,
+                message=f"serveur perdu en route ({str(error)[:90]}) : réveil, le chapitre repart",
+            )
+            CONCIERGE.forget()
+            wake(backend, job, queue)
+    raise AssertionError("inatteignable")
+
+
 def run_synth(project: Project, job: Job, queue: Queue) -> None:
     from .tts.backends import load
-    from .tts.synth import load_segments, previous_takes, profile_for_voice, synthesize_chapter
+    from .tts.synth import load_segments, previous_takes, profile_for_voice
 
     backend = job.params.get("backend", "xtts")
     voice = job.params.get("voice")
@@ -156,6 +196,12 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     changed = project.voice is not None and previous != signature
     if changed:
         queue.report(job.id, message="réglage différent du précédent : tout est resynthétisé")
+        # Les pistes d'avant la note portent la voix d'avant : on l'écrit sur elles
+        # maintenant, tant qu'on la connaît. Une synthèse interrompue les laisserait
+        # sinon passer pour à jour à la relance, le projet ayant déjà retenu la nouvelle.
+        for old in project.wav_dir.glob("ch*.wav"):
+            if not read_stamp(old):
+                write_stamp(old, previous)
     project.backend, project.voice = backend, chosen
     project.save()
 
@@ -182,11 +228,12 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     for index, path in enumerate(paths):
         check_cancel()
         target = project.wav_dir / f"{path.stem}.wav"
-        if track_is_current(target, path) and not (force or changed):
+        if track_is_current(target, path, signature) and not force:
             queue.report(job.id, (index + 1) / len(paths), f"{path.stem} déjà synthétisé")
             continue
         reuse = None
-        if target.exists() and not (force or changed):
+        same_voice = read_stamp(target) == signature if read_stamp(target) else not changed
+        if target.exists() and not force and same_voice:
             # Même voix, même débit : ce qui n'a pas changé de texte est repris tel quel.
             number = int(path.stem.removeprefix("ch"))
             reuse = previous_takes(target, project.timing(number))
@@ -197,8 +244,11 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
             index / len(paths),
             f"{path.stem} — {segments[0].title} ({len(segments)} segments)",
         )
-        result = synthesize_chapter(engine, segments, profile, on_segment=check_cancel, reuse=reuse)
+        result = synthesize_with_recovery(
+            engine, segments, profile, check_cancel, reuse, backend, job, queue
+        )
         result.write(target)
+        write_stamp(target, signature)
         warnings += result.warnings
         summary = f"{path.stem} → {result.duration / 60:.1f} min"
         if result.reused:
@@ -418,6 +468,8 @@ def run_resynth(project: Project, job: Job, queue: Queue) -> None:
     track.with_suffix(".timing.json").write_text(
         json.dumps(timing, ensure_ascii=False, indent=1), encoding="utf-8"
     )
+    if not read_stamp(track):
+        write_stamp(track, project.signature)
     verdict = "propre" if fresh["clean"] else f"toujours signalé ({fresh.get('cause')})"
     queue.report(
         job.id, 1.0, f"segment {idx} rejoué : {verdict}. Réassemblez pour mettre le M4B à jour."

@@ -24,6 +24,28 @@ from pathlib import Path
 from .assemble import BookMetadata
 from .document import Document
 
+# À côté de chaque piste, un petit fichier dit quelle voix l'a lue — moteur, voix et
+# débit. Sans lui, une synthèse interrompue après un changement de voix laissait les
+# chapitres non atteints passer pour à jour à la relance : ils disaient bien le texte,
+# mais de l'ancienne voix.
+STAMP_SUFFIX = ".voice"
+
+
+def stamp_path(track: Path) -> Path:
+    return track.with_suffix(STAMP_SUFFIX)
+
+
+def read_stamp(track: Path) -> str:
+    path = stamp_path(track)
+    try:
+        return path.read_text(encoding="utf-8").strip() if path.exists() else ""
+    except OSError:
+        return ""
+
+
+def write_stamp(track: Path, signature: str) -> None:
+    stamp_path(track).write_text(signature, encoding="utf-8")
+
 
 @dataclass
 class Project:
@@ -305,6 +327,15 @@ class Project:
             return 0
         return sum(1 for state in self.chapter_states() if not state["reviewed"])
 
+    @property
+    def signature(self) -> str:
+        """Moteur, voix et débit : ce qui fait qu'une piste sonne comme les autres."""
+        return f"{self.backend}/{self.voice}@{self.speed:.2f}"
+
+    def track_signature(self, number: int) -> str:
+        """La signature notée sur une piste ; vide pour une piste d'avant cette note."""
+        return read_stamp(self.wav_dir / f"ch{number:02d}.wav")
+
     def timing(self, number: int) -> list[dict]:
         """Le manifeste d'une piste : chaque segment et sa plage dans le fichier."""
         path = self.wav_dir / f"ch{number:02d}.timing.json"
@@ -338,6 +369,10 @@ class Project:
         """
         timing = self.timing(number)
         if not timing or not (self.wav_dir / f"ch{number:02d}.wav").exists():
+            return False
+        # Une piste d'une autre voix n'est pas à jour, quand bien même elle dit le texte.
+        stamped = self.track_signature(number)
+        if stamped and stamped != self.signature:
             return False
         said = [(int(e.get("idx", 0)), str(e.get("text", ""))) for e in timing]
         return said == self.segment_texts(number)

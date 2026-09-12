@@ -288,6 +288,45 @@ class TestPisteAJour:
         segments.write_text('{"idx": 0, "text": "Un et deux."}\n')
         assert not track_is_current(track, segments)
 
+    def test_une_piste_d_une_autre_voix_n_est_pas_a_jour(self, tmp_path):
+        import json
+
+        from voxlibris.project import read_stamp, write_stamp
+        from voxlibris.worker import track_is_current
+
+        segments, track = tmp_path / "ch01.jsonl", tmp_path / "ch01.wav"
+        segments.write_text('{"idx": 0, "text": "Un."}\n')
+        track.write_bytes(b"RIFF")
+        track.with_suffix(".timing.json").write_text(json.dumps([{"idx": 0, "text": "Un."}]))
+        # Sans note, la piste est jugée sur son texte : le cas des pistes d'avant.
+        assert read_stamp(track) == ""
+        assert track_is_current(track, segments, "omnivoice/Marie@1.00")
+
+        write_stamp(track, "xtts/Viktor Menelaos@1.00")
+        assert not track_is_current(track, segments, "omnivoice/Marie@1.00")
+        assert track_is_current(track, segments, "xtts/Viktor Menelaos@1.00")
+
+    def test_le_projet_voit_la_voix_de_la_piste(self, client, make_epub):
+        import json
+
+        from voxlibris.project import write_stamp
+        from voxlibris.web import app as app_module
+
+        name = TestRelecture._create(None, client, make_epub)
+        project = app_module.load_project(name)
+        project.backend, project.voice, project.speed = "omnivoice", "Marie", 1.0
+        project.save()
+        assert project.signature == "omnivoice/Marie@1.00"
+        project.segments_dir.mkdir(parents=True, exist_ok=True)
+        (project.segments_dir / "ch01.jsonl").write_text('{"idx": 0, "text": "Un."}\n')
+        project.wav_dir.mkdir(parents=True, exist_ok=True)
+        track = project.wav_dir / "ch01.wav"
+        track.write_bytes(b"RIFF")
+        track.with_suffix(".timing.json").write_text(json.dumps([{"idx": 0, "text": "Un."}]))
+        assert project.track_matches(1)
+        write_stamp(track, "xtts/Viktor Menelaos@1.00")
+        assert not project.track_matches(1)
+
     def test_la_page_de_synthese_donne_la_marche_a_suivre(self, client, make_epub):
         import os
 
