@@ -49,8 +49,13 @@ Sans carte, Piper et Kokoro tournent sur processeur.
 ```bash
 git clone https://github.com/ralphi2811/voxlibris && cd voxlibris
 cp .env.example .env
+docker compose pull
 docker compose up
 ```
+
+Les images sont publiées sur ghcr.io par l'intégration continue à chaque changement :
+`pull` les télécharge. Sans lui, `up` les construit sur place, ce qui prend dix minutes
+pour l'atelier.
 
 L'interface est sur `http://localhost:8000`. Trois conteneurs tournent : l'interface,
 légère ; l'atelier, qui porte les moteurs de synthèse ; et un relais vers Docker, réduit
@@ -69,21 +74,27 @@ déclarer avec cette même paire de fichiers :
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml \
+  --profile omnivoice --profile zonos2 --profile voxtral pull
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml \
   --profile omnivoice --profile zonos2 --profile voxtral up -d
 ```
 
 Déclarez-en autant que vous voulez : ils ne tiennent pas tous sur une carte à la fois,
-et l'atelier s'en charge, voir [le concierge](#le-concierge-de-la-carte-graphique). Leur
-première construction est longue, leurs poids se téléchargent au premier démarrage, dans
-le volume `models`, qui survit aux reconstructions.
+et l'atelier s'en charge, voir [le concierge](#le-concierge-de-la-carte-graphique). Leurs
+poids se téléchargent au premier démarrage, dans le volume `models`, qui survit aux
+reconstructions.
 
 | Image | Taille | Contenu |
 |---|---|---|
-| `voxlibris-web` | 0,5 Go | l'interface |
-| `voxlibris-worker` | 15 Go | PyTorch, XTTS, Kokoro, Piper, Tesseract, ffmpeg |
-| `voxlibris-omnivoice` | 13 Go | PyTorch et OmniVoice, profil `omnivoice` seulement |
-| `voxlibris-voxtral` | 30 Go | vLLM, profil `voxtral` seulement |
-| `voxlibris-zonos2` | 37 Go | serveur de Zyphra sur CUDA complet, profil `zonos2` seulement |
+| `ghcr.io/ralphi2811/voxlibris-web` | 0,5 Go | l'interface |
+| `ghcr.io/ralphi2811/voxlibris-worker` | 15 Go | PyTorch, XTTS, Kokoro, Piper, Tesseract, ffmpeg |
+| `ghcr.io/ralphi2811/voxlibris-omnivoice` | 13 Go | PyTorch et OmniVoice, profil `omnivoice` seulement |
+| `ghcr.io/ralphi2811/voxlibris-voxtral` | 30 Go | vLLM, profil `voxtral` seulement |
+| `ghcr.io/ralphi2811/voxlibris-zonos2` | 37 Go | serveur de Zyphra sur CUDA complet, profil `zonos2` seulement |
+
+Les trois premières sont publiées à chaque changement. Les deux dernières dépassent ce
+que les machines de GitHub ont de disque ; elles sont publiées à la main quand elles
+passent, et se construisent sur place sinon — `pull` le dit, `up` s'en charge.
 
 **Un premier livre.** `samples/maupassant-le-horla.epub` est du domaine public et
 traverse la chaîne sans intervention : déposez-le dans la Bibliothèque, choisissez une
@@ -312,7 +323,9 @@ Ubuntu, sans carte.
 
 Après une modification de `src/`, reconstruisez l'image concernée avec la même paire de
 fichiers Compose que celle qui a démarré l'atelier — sans la surcharge, le worker repart
-sans sa carte :
+sans sa carte. Les Dockerfiles installent les dépendances avant de copier le code : la
+reconstruction ne refait pas PyTorch, et l'intégration continue, qui publie les images
+sur ghcr.io avec son cache de couches, non plus.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build --no-deps worker web

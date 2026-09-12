@@ -1,5 +1,7 @@
 # voxlibris — un « docker compose up » doit suffire.
 #
+#   docker compose pull                                les images publiées, plutôt que
+#                                                      les construire sur place
 #   docker compose up                                  interface + atelier, sans GPU
 #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
 #                                                      idem, avec la carte NVIDIA
@@ -33,7 +35,7 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
-    image: voxlibris-web
+    image: ghcr.io/ralphi2811/voxlibris-web:latest
     ports:
       - "${VOXLIBRIS_PORT:-8000}:8000"
     depends_on:
@@ -44,7 +46,7 @@ services:
     build:
       context: .
       dockerfile: docker/worker.Dockerfile
-    image: voxlibris-worker
+    image: ghcr.io/ralphi2811/voxlibris-worker:latest
     volumes:
       - ${VOXLIBRIS_DATA_DIR:-./data}:/data
       # Les poids pèsent des gigaoctets : un volume nommé leur évite d'être
@@ -83,7 +85,7 @@ services:
     build:
       context: .
       dockerfile: docker/voxtral.Dockerfile
-    image: voxlibris-voxtral
+    image: ghcr.io/ralphi2811/voxlibris-voxtral:latest
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - path: .env
@@ -113,7 +115,7 @@ services:
     build:
       context: .
       dockerfile: docker/zonos2.Dockerfile
-    image: voxlibris-zonos2
+    image: ghcr.io/ralphi2811/voxlibris-zonos2:latest
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - path: .env
@@ -140,7 +142,7 @@ services:
     build:
       context: .
       dockerfile: docker/omnivoice.Dockerfile
-    image: voxlibris-omnivoice
+    image: ghcr.io/ralphi2811/voxlibris-omnivoice:latest
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - path: .env

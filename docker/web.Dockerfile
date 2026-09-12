@@ -9,9 +9,14 @@ ENV PYTHONUNBUFFERED=1 \
     HOME=/tmp
 
 WORKDIR /app
-COPY pyproject.toml README.md LICENSE ./
+# Les dépendances d'abord, sur un paquet vide, le code ensuite : une modification de
+# src/ ne réinstalle rien.
+COPY pyproject.toml LICENSE ./
+RUN touch README.md && mkdir -p src/voxlibris && touch src/voxlibris/__init__.py \
+    && pip install .
+COPY README.md ./
 COPY src ./src
-RUN pip install .
+RUN pip install --no-deps .
 
 # Le conteneur tourne sous l'UID de l'hôte (voir docker-compose.yml). Tout ce qu'il
 # doit écrire vit sous /data, monté depuis l'hôte, ou sous /tmp.

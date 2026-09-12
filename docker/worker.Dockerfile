@@ -20,10 +20,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY pyproject.toml README.md LICENSE ./
-COPY src ./src
+# Les dépendances d'abord, sur un paquet vide : c'est la couche lourde — PyTorch, les
+# moteurs — et elle ne dépend que de pyproject.toml. Le code arrive après, si bien
+# qu'une modification de src/ ne la refait pas, ni ici ni dans l'intégration continue.
+COPY pyproject.toml LICENSE ./
 COPY docker/worker.constraints.txt ./constraints.txt
-RUN pip install -c constraints.txt ".[tts,ocr]"
+RUN touch README.md && mkdir -p src/voxlibris && touch src/voxlibris/__init__.py \
+    && pip install -c constraints.txt ".[tts,ocr]"
+COPY README.md ./
+COPY src ./src
+RUN pip install --no-deps .
 
 # Les poids des modèles vont dans un volume nommé, pour survivre aux reconstructions.
 # Le conteneur tourne sous l'UID de l'hôte, qui n'existe pas dans l'image : tout
