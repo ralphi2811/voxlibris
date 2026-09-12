@@ -86,7 +86,7 @@
       {% for s in suspects %}
       <div class="proposal suspect" data-reason="{{ s.reason }}">
         <div class="row">
-          <button type="button" class="mono link locate" data-word="{{ s.word }}">{{ s.word }}</button>
+          <button type="button" class="mono link locate" data-word="{{ s.word }}" data-offset="{{ s.offset }}">{{ s.word }}</button>
           <span class="spacer"></span><span class="chip muted">{{ s.reason }}</span>
         </div>
         <div class="serif muted small ctx">…{{ s.context }}…</div>

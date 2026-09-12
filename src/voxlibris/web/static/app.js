@@ -199,18 +199,57 @@
     var area = document.querySelector("textarea[name=text]");
     if (!area) return;
 
+    // La hauteur exacte d'une position dans la zone de texte : un double invisible, aux
+    // mêmes polices, largeur et marges, reçoit le texte jusqu'à cette position et un
+    // repère au bout. Une simple proportion (position / longueur) se trompait d'un
+    // écran entier dès que les paragraphes n'ont pas tous la même longueur.
+    var mirror = null;
+    var lineTop = function (at) {
+      if (!mirror) {
+        mirror = document.createElement("div");
+        mirror.setAttribute("aria-hidden", "true");
+        mirror.style.cssText = "position:absolute;visibility:hidden;top:0;left:-9999px;white-space:pre-wrap;overflow-wrap:break-word;pointer-events:none;";
+        document.body.appendChild(mirror);
+      }
+      var css = getComputedStyle(area);
+      ["fontFamily", "fontSize", "fontWeight", "fontStyle", "lineHeight", "letterSpacing", "wordSpacing",
+       "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderTopWidth", "borderRightWidth",
+       "borderLeftWidth", "boxSizing", "textIndent", "tabSize"].forEach(function (k) { mirror.style[k] = css[k]; });
+      mirror.style.width = area.clientWidth + "px";
+      mirror.textContent = area.value.slice(0, at);
+      var mark = document.createElement("span");
+      mark.textContent = "\u200b";
+      mirror.appendChild(mark);
+      return mark.offsetTop;
+    };
+
     var select = function (at, length) {
       area.focus();
       area.setSelectionRange(at, at + length);
-      var ratio = at / Math.max(area.value.length, 1);
-      area.scrollTop = ratio * area.scrollHeight - area.clientHeight / 2;
+      area.scrollTop = Math.max(0, lineTop(at) - area.clientHeight / 2);
+    };
+
+    // Retrouve un mot à la position relevée par l'analyse ; si le texte a bougé depuis,
+    // la même forme entière — pas « ex » au milieu d'« exemple » — la plus proche de
+    // cette position.
+    var wordAt = function (word, offset) {
+      if (area.value.startsWith(word, offset)) return offset;
+      var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      var re = new RegExp("(^|[^\\p{L}\\p{N}])(" + escaped + ")(?![\\p{L}\\p{N}])", "gu");
+      var best = -1, m;
+      while ((m = re.exec(area.value)) !== null) {
+        var pos = m.index + m[1].length;
+        if (best < 0 || Math.abs(pos - offset) < Math.abs(best - offset)) best = pos;
+        if (pos > offset) break;
+      }
+      return best >= 0 ? best : area.value.indexOf(word);
     };
 
     // Un mot signalé se sélectionne dans le texte : c'est le va-et-vient qui rend la
     // relecture d'un scan supportable.
     document.querySelectorAll(".locate").forEach(function (b) {
       b.addEventListener("click", function () {
-        var at = area.value.indexOf(b.dataset.word);
+        var at = wordAt(b.dataset.word, Number(b.dataset.offset));
         if (at >= 0) select(at, b.dataset.word.length);
       });
     });
@@ -220,7 +259,7 @@
     // envoyé : c'est « Enregistrer » qui décide, comme pour le reste.
     var accept = function (b) {
       var word = b.dataset.word, replacement = b.dataset.replacement, offset = Number(b.dataset.offset);
-      var at = area.value.startsWith(word, offset) ? offset : area.value.indexOf(word);
+      var at = wordAt(word, offset);
       var card = b.closest(".proposal");
       if (at < 0) { b.disabled = true; b.title = "cette forme n'est plus dans le texte"; return false; }
       area.value = area.value.slice(0, at) + replacement + area.value.slice(at + word.length);
