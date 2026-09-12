@@ -1,8 +1,8 @@
-# Les images de voxlibris, publiées sur ghcr.io — gratuit pour un dépôt public, comme les
-# minutes de ces machines. L'interface, l'atelier et OmniVoice tiennent sur leur disque
-# une fois les outils préinstallés retirés ; Voxtral et ZONOS2, non : voir
-# images-heavy.yml. Le cache de couches vit lui aussi sur ghcr.io, sans quoi PyTorch se
-# retéléchargerait à chaque passage.
+# Les cinq images de voxlibris, publiées sur ghcr.io — gratuit pour un dépôt public, comme
+# les minutes de ces machines. Leur disque, une fois les outils préinstallés retirés,
+# offre plus de cent gigaoctets : ZONOS2, 37 Go, y passe en un quart d'heure. Le cache de
+# couches vit lui aussi sur ghcr.io, sans quoi PyTorch et vLLM se retéléchargeraient à
+# chaque passage ; une image dont rien n'a changé n'est que ré-étiquetée.
 name: images
 
 on:
@@ -26,12 +26,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [web, worker, omnivoice]
+        image: [web, worker, omnivoice, voxtral, zonos2]
     steps:
       - name: Faire de la place
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift \
+            /usr/lib/jvm /usr/local/.ghcup /usr/share/miniconda /opt/az \
+            /usr/local/julia* /usr/local/lib/node_modules /opt/microsoft
+          sudo apt-get clean
           sudo docker image prune -af
           df -h /
       - uses: actions/checkout@v4

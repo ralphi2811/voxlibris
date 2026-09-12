@@ -92,9 +92,8 @@ reconstructions.
 | `ghcr.io/ralphi2811/voxlibris-voxtral` | 30 Go | vLLM, profil `voxtral` seulement |
 | `ghcr.io/ralphi2811/voxlibris-zonos2` | 37 Go | serveur de Zyphra sur CUDA complet, profil `zonos2` seulement |
 
-Les trois premières sont publiées à chaque changement. Les deux dernières dépassent ce
-que les machines de GitHub ont de disque ; elles sont publiées à la main quand elles
-passent, et se construisent sur place sinon — `pull` le dit, `up` s'en charge.
+Toutes sont publiées par l'intégration continue à chaque changement qui les concerne ;
+`build:` reste dans le Compose pour qui modifie le code.
 
 **Un premier livre.** `samples/maupassant-le-horla.epub` est du domaine public et
 traverse la chaîne sans intervention : déposez-le dans la Bibliothèque, choisissez une
