@@ -102,7 +102,11 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 testpaths = ["tests"]
 
 [dependency-groups]
+# Ce qu'il faut pour lancer les tests sans carte graphique ni moteur : c'est ce que fait
+# l'intégration continue. soundfile lit les pistes que les tests de reprise fabriquent.
 dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
+    "ruff>=0.5",
+    "soundfile>=0.12",
 ]

@@ -1,0 +1,21 @@
+# Lint et tests, sans carte graphique ni moteur de synthèse : le cœur de voxlibris
+# tourne sans PyTorch, et c'est lui que les tests éprouvent.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --group dev --python 3.12
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q

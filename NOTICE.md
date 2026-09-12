@@ -21,8 +21,8 @@ engage donc l'utilisateur au moment où il choisit de l'exécuter.
 
 ### Voxtral TTS : la restriction est à l'envers des autres
 
-Pour les trois premiers, voxlibris exécute des poids téléchargés sur votre machine. Pour
-Voxtral, il appelle l'API de Mistral, et **le texte du livre quitte donc la machine** :
+Pour les moteurs locaux, voxlibris exécute des poids téléchargés sur votre machine. Pour
+Voxtral en API, il appelle le service de Mistral, et **le texte du livre quitte donc la machine** :
 c'est le seul moteur dans ce cas, et c'est à ce titre qu'il n'est jamais choisi par
 défaut. Il ne démarre pas sans `VOXLIBRIS_MISTRAL_API_KEY`.
 
@@ -48,13 +48,9 @@ toute licence logicielle. Les extraits restent dans `data/voices`, sur votre mac
 Il offre la meilleure qualité en français, et c'est pourquoi il est proposé par défaut.
 Mais la **Coqui Public Model License interdit tout usage commercial**.
 
-Si votre usage est commercial, changez de moteur — c'est une ligne de configuration :
-
-```yaml
-# config.yaml
-tts:
-  backend: kokoro   # Apache 2.0, ou "piper" pour du MIT
-```
+Si votre usage est commercial, changez de moteur : Kokoro (Apache 2.0), Piper (MIT),
+OmniVoice ou ZONOS2 (Apache 2.0) se choisissent dans la page Voix de l'interface, ou par
+`--backend kokoro` en ligne de commande.
 
 La première exécution de XTTS suppose l'acceptation de la CPML, matérialisée par la
 variable d'environnement `COQUI_TOS_AGREED=1`. Elle n'est **pas** positionnée par défaut :

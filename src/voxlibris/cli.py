@@ -271,7 +271,7 @@ def voices(
 @app.command()
 def synth(
     root: Path,
-    backend: str = typer.Option("xtts", help="xtts, kokoro ou piper"),
+    backend: str = typer.Option("xtts", help="xtts, kokoro, piper, voxtral, zonos2 ou omnivoice"),
     voice: str = typer.Option(None, help="voix du moteur ; défaut selon le moteur"),
     chapters: str = typer.Option(None, help="liste de numéros, par exemple 1,2,3"),
     force: bool = typer.Option(False, help="resynthétiser même si le WAV existe"),
