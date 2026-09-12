@@ -14,7 +14,7 @@ verbes. Sans relais, VOXLIBRIS_DOCKER_URL vide, le concierge est inerte : l'atel
 ce qui répond et ne touche à rien, comme avant.
 
 Ce qu'il sait des moteurs — leur poids sur la carte, l'adresse de leur service, le temps
-d'un réveil — est écrit ici, mesuré sur une RTX 4090. Il en déduit aussi l'adresse d'un
+d'un réveil — est écrit ici, mesuré sur une carte de 24 Go. Il en déduit aussi l'adresse d'un
 serveur dont le conteneur existe : plus rien à saisir dans les Réglages pour un service
 Compose, le champ ne sert qu'à un serveur externe.
 """

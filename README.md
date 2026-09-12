@@ -357,7 +357,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build --n
 
 ## État du projet
 
-voxlibris a été développé et éprouvé sur une seule machine — Linux, une RTX 4090 —, sur
+voxlibris a été développé et éprouvé sur une seule machine — Linux, une carte de 24 Go —, sur
 des livres en français : c'est la langue de sa relecture, de sa normalisation et de ses
 voix par défaut. Les autres langues des moteurs sont accessibles mais peu essayées. La
 détection de structure des PDF scannés est une heuristique calibrée sur quelques
