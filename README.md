@@ -157,19 +157,23 @@ sa carte graphique, ses moteurs, et l'état des serveurs qu'il garde.
 Les trois premiers vivent dans l'atelier ; les trois autres sont des serveurs à part,
 sous profil, que l'atelier réveille à la demande.
 
-### Deux voix : le récit et les répliques
+### Plusieurs voix : la distribution
 
-Un livre peut être lu à deux voix, sur le même moteur : le narrateur pour le récit, une
-autre pour les dialogues. Les répliques sont reconnues à leur typographie — les
-paragraphes qui ouvrent sur un tiret ou des guillemets —, sans rien deviner de plus :
-une réplique nichée dans un paragraphe de récit reste au narrateur, et l'incise
-« dit-elle » suit sa réplique. La page Préparation compte les répliques repérées et les
-marque dans l'aperçu ; la voix des dialogues se choisit sur la page Synthèse, dans le
-catalogue du moteur — une voix clonée, avec OmniVoice ou ZONOS2. Le champ vide rend le
-livre au narrateur seul.
+Un livre peut être lu à plusieurs voix, sur le même moteur. Le narrateur lit tout, sauf
+ce que la **distribution** — sur la page Synthèse — confie à d'autres voix du catalogue
+du moteur, une voix clonée comprise :
 
-Changer une voix ne refait que ce qu'elle disait : le manifeste de chaque piste note qui
-a dit chaque segment, et l'autre voix est reprise telle quelle.
+- **Répliques** : les paragraphes qui ouvrent sur un tiret ou des guillemets, reconnus
+  à leur typographie, sans rien deviner de plus. Une réplique nichée dans un paragraphe
+  de récit reste au narrateur, et l'incise « dit-elle » suit sa réplique.
+- **Un persona** : les paragraphes que vous lui attribuez dans la Relecture — les
+  lettres d'un frère, le journal d'un personnage. Sélectionnez la plage, nommez le
+  persona, Attribuer : le texte reçoit une ligne `@Charles` avant et une ligne `@` après,
+  et c'est le texte qui porte l'attribution, donc elle survit à toute correction. Un
+  persona nommé sans voix est lu par le narrateur, et la synthèse le dit.
+
+Un champ vide rend au narrateur. Changer une voix ne refait que ce qu'elle disait : le
+manifeste de chaque piste note qui a dit chaque segment, le reste est repris tel quel.
 
 ### Cloner une voix : OmniVoice et ZONOS2
 
@@ -318,7 +322,8 @@ docker compose run --rm worker voxlibris assemble /data/projet
 ```
 
 `synth --dialogue-voice "Ana Florence"` confie les répliques à une seconde voix du même
-moteur ; `--dialogue-voice -` revient au narrateur seul.
+moteur, `--cast "Charles=Damien"` donne sa voix à un persona du texte ; `-` ou une voix
+vide rendent au narrateur.
 
 La ligne de commande vise la carte par défaut : sans carte, ajoutez `--device cpu` à
 `synth`. `voxlibris run livre.epub projet/` enchaîne le tout, et refuse de le faire pour un

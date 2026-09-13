@@ -15,7 +15,7 @@
         {% if project.pending_review %}<span class="chip warn">{{ icons.ic("warn", 12) }}{{ project.pending_review }} chapitre(s) à relire</span>
         {% else %}<span class="chip ok">{{ icons.ic("check", 12) }}texte relu</span>{% endif %}
       {% else %}<span class="chip ok">{{ icons.ic("check", 12) }}texte propre</span>{% endif %}
-      {% if project.voice %}<span class="chip muted">{{ project.backend }} · {{ project.voice }}{% if project.dialogue_voice %} + {{ project.dialogue_voice }}{% endif %}</span>{% endif %}
+      {% if project.voice %}<span class="chip muted">{{ project.backend }} · {{ project.voice }}{% for persona, voice in project.voices.items() if voice %} + {{ voice }}{% endfor %}</span>{% endif %}
       {% if status["m4b"] %}<span class="chip ok">M4B prêt</span>{% endif %}
     </div>
   </div>

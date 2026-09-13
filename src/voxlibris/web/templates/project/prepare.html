@@ -19,11 +19,11 @@
         <thead><tr><th class="w40">#</th><th>Segment</th><th class="w110">Silence après</th></tr></thead>
         <tbody>
         {% for s in preview %}
-        <tr><td class="mono muted">{{ s.idx }}</td><td class="serif">{{ s.text }}{% if s.role == "dialogue" %} <span class="chip muted" title="Lu par la voix des dialogues, si le projet en a une">dialogue</span>{% endif %}</td><td class="mono muted">{{ s.pause_after_ms }} ms</td></tr>
+        <tr><td class="mono muted">{{ s.idx }}</td><td class="serif">{{ s.text }}{% if s.role != "narrateur" %} <span class="chip muted" title="Lu par la voix de ce persona, si le projet lui en donne une">{{ s.role }}</span>{% endif %}</td><td class="mono muted">{{ s.pause_after_ms }} ms</td></tr>
         {% endfor %}
         </tbody>
       </table>
-      <p class="card-foot muted small">Les huit premiers segments du premier chapitre, tels qu'ils partent au moteur.{% if project.announce_chapters %} L'annonce de chapitre est le tout premier.{% endif %} {% if dialogues %}{{ dialogues }} répliques repérées sur le livre — les paragraphes ouvrant sur un tiret ou des guillemets — qu'une <a href="/projects/{{ name }}/synth">voix des dialogues</a> peut lire.{% else %}Aucune réplique repérée : pas de paragraphe ouvrant sur un tiret ou des guillemets.{% endif %}</p>
+      <p class="card-foot muted small">Les huit premiers segments du premier chapitre, tels qu'ils partent au moteur.{% if project.announce_chapters %} L'annonce de chapitre est le tout premier.{% endif %} {% if dialogues %}{{ dialogues }} répliques repérées sur le livre — les paragraphes ouvrant sur un tiret ou des guillemets.{% else %}Aucune réplique repérée : pas de paragraphe ouvrant sur un tiret ou des guillemets.{% endif %}{% for persona, count in personas %} {{ persona }} : {{ count }} segments.{% endfor %} La <a href="/projects/{{ name }}/synth">distribution</a> dit qui lit quoi.</p>
       {% else %}
       <p class="muted pad">Lancez la préparation pour voir les segments.</p>
       {% endif %}

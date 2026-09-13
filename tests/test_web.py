@@ -792,26 +792,33 @@ class TestDistribution:
         assert page.count(">dialogue</span>") == 1
         assert "1 répliques repérées" in page
 
-    def test_la_voix_des_dialogues_part_avec_la_tache(self, client, make_epub):
+    def test_la_distribution_se_retient(self, client, make_epub):
         from voxlibris.web import app as app_module
 
         name, _ = self.make(client, make_epub)
         page = client.get(f"/projects/{name}/synth").text
-        assert 'name="dialogue_voice"' in page
+        assert "Répliques" in page and 'name="persona"' in page
         client.post(
-            f"/projects/{name}/jobs/synth",
-            data={"backend": "kokoro", "voice": "a", "dialogue_voice": " b "},
+            f"/projects/{name}/cast",
+            data={
+                "persona": ["dialogue", "@Charles", "narrateur", ""],
+                "voice": [" b ", "c", "d", "e"],
+            },
         )
-        job = app_module.queue.active(name)
-        assert job is not None and job.params["dialogue_voice"] == "b"
+        assert app_module.load_project(name).voices == {"dialogue": "b", "Charles": "c"}
+        page = client.get(f"/projects/{name}/synth").text
+        assert 'value="Charles"' in page and 'value="c"' in page
+        review = client.get(f"/projects/{name}/review/1").text
+        assert 'id="persona-assign"' in review and '<option value="Charles">' in review
 
     def test_changer_de_moteur_oublie_la_voix_des_dialogues(self, client, make_epub):
         from voxlibris.web import app as app_module
 
         name, project = self.make(client, make_epub)
-        project.backend, project.voice, project.dialogue_voice = "xtts", "Viktor", "Ana"
+        project.backend, project.voice, project.voices = "xtts", "Viktor", {"Charles": "Ana"}
         project.save()
         client.post(f"/projects/{name}/voice", data={"backend": "xtts", "voice": "Damien"})
-        assert app_module.load_project(name).dialogue_voice == "Ana"
+        assert app_module.load_project(name).voices == {"Charles": "Ana"}
         client.post(f"/projects/{name}/voice", data={"backend": "kokoro", "voice": "ff_siwis"})
-        assert app_module.load_project(name).dialogue_voice is None
+        # Le persona reste, sa voix — qui appartenait à l'autre moteur — non.
+        assert app_module.load_project(name).voices == {"Charles": ""}

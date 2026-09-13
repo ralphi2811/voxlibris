@@ -224,6 +224,29 @@ class TestDistribution:
         # Un tiret collé à un nombre est un signe moins, pas un dialogue.
         assert N.role_of("-12 degrés ce matin-là.") == N.NARRATOR
 
+    def test_un_marqueur_confie_les_paragraphes_a_un_persona(self):
+        """« @Charles » vaut jusqu'au prochain marqueur ; « @ » rend la parole au narrateur ;
+        et il l'emporte sur la typographie."""
+        assert N.persona_of("@Charles") == "Charles"
+        assert N.persona_of("@ Charles ") == "Charles"
+        assert N.persona_of("@") == "" and N.persona_of("@narrateur") == ""
+        assert N.persona_of("Charles @ la maison") is None
+        records = N.build_chapter_segments(
+            1,
+            "Un",
+            [
+                "Le facteur a apporté une lettre.",
+                "@Charles",
+                "Ma Lulu, nous n'avons pas arrêté de bouger.",
+                "— Rassemblement ! a crié le lieutenant.",
+                "@",
+                "— Il va bien, ai-je dit à maman.",
+            ],
+            announce_chapter=False,
+        )
+        assert [r["role"] for r in records] == [N.NARRATOR, "Charles", "Charles", N.DIALOGUE]
+        assert all(not str(r["text"]).startswith("@") for r in records)
+
     def test_les_segments_portent_leur_role(self):
         records = N.build_chapter_segments(
             2,

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..normalize import DIALOGUE, NARRATOR
+from ..normalize import NARRATOR
 from .backends import Backend
 from .quality import SAMPLE_RATE, QualityProfile, Take, calibrate, render_with_fallback
 from .voxtral import Refused
@@ -54,28 +54,37 @@ def load_segments(path: Path) -> list[Segment]:
     ]
 
 
-# La distribution : pour chaque rôle, le moteur qui le dit et le contrôle qualité calibré
-# sur sa voix. Un rôle absent revient au narrateur.
+# La distribution : pour chaque rôle — en minuscules, les marqueurs du texte n'étant pas
+# tenus à la casse —, le moteur qui le dit et le contrôle qualité calibré sur sa voix.
+# Un rôle absent revient au narrateur.
 Cast = Mapping[str, tuple[Backend, QualityProfile]]
 
 
 def build_cast(
     engine: Backend,
-    dialogue_voice: str | None,
+    voices: Mapping[str, str],
     segments: Iterable[Segment],
     store: Path,
 ) -> dict[str, tuple[Backend, QualityProfile]]:
-    """Prépare la voix des dialogues : le même moteur, une autre voix, son propre débit.
+    """Prépare chaque voix de la distribution : même moteur, autre voix, débit propre.
 
-    Le débit est calibré sur des répliques, pas sur du récit : c'est bien ce que cette
-    voix dira. Sans voix de dialogue, la distribution est vide et tout revient au
+    Le débit d'un persona est calibré sur ce qu'il dira — les répliques pour la voix des
+    dialogues, les lettres de Charles pour Charles —, pas sur le récit. Un persona sans
+    voix, ou sans un seul segment, n'est pas préparé : le narrateur lira ses paragraphes,
+    et c'est à celui qui appelle de le dire. Sans distribution, tout revient au
     narrateur — le livre sonne comme avant.
     """
-    if not dialogue_voice:
-        return {}
-    second = engine.cast(dialogue_voice)
-    lines = [s for s in segments if s.role == DIALOGUE]
-    return {DIALOGUE: (second, profile_for_voice(second, lines, store))}
+    lines: dict[str, list[Segment]] = {}
+    for segment in segments:
+        lines.setdefault(segment.role.casefold(), []).append(segment)
+    cast: dict[str, tuple[Backend, QualityProfile]] = {}
+    for role, voice in voices.items():
+        key = role.casefold()
+        if not voice or key == NARRATOR or key not in lines:
+            continue
+        second = engine.cast(voice)
+        cast[key] = (second, profile_for_voice(second, lines[key], store))
+    return cast
 
 
 @dataclass
@@ -168,7 +177,7 @@ def synthesize_chapter(
     cursor = len(lead_in)
 
     for segment in segments:
-        engine, profile_of = cast.get(segment.role, (backend, profile))
+        engine, profile_of = cast.get(segment.role.casefold(), (backend, profile))
         voice = str(getattr(engine, "voice", "") or "")
         reused = reuse(segment.text, voice) if reuse else None
         try:

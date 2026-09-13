@@ -22,7 +22,7 @@ from . import atelier
 from .assemble import build
 from .concierge import Concierge
 from .config import setting
-from .normalize import DIALOGUE, build_segments
+from .normalize import DIALOGUE, NARRATOR, build_segments
 from .project import (
     Project,
     make_signature,
@@ -142,30 +142,42 @@ def server_errors() -> tuple[type[Exception], ...]:
 
 
 def casting(engine, project: Project, paths: list[Path], job: Job, queue: Queue) -> dict:
-    """La voix des dialogues, si le projet en a une : moteur jumeau et débit calibré.
+    """La distribution du projet, prête à parler : un moteur jumeau et un débit calibré
+    par persona qui a une voix et des segments.
 
-    Les répliques de tout le livre servent à la calibration — le premier chapitre peut
-    n'en contenir aucune. Un livre sans réplique repérée le dit, plutôt que de laisser
-    croire que la voix choisie a servi.
+    Les segments de tout le livre servent à la calibration — le premier chapitre peut
+    ne contenir ni réplique ni lettre. Ce qui ne servira pas est dit : une voix sans
+    segment, un persona nommé dans le texte sans voix. Le silence, ici, ferait croire
+    que la voix choisie a servi.
     """
+    from collections import Counter
+
     from .tts.synth import build_cast, load_segments
 
-    if not project.dialogue_voice:
+    if not any(project.voices.values()):
         return {}
-    lines = [s for path in paths for s in load_segments(path) if s.role == DIALOGUE]
-    if not lines:
+    segments = [s for path in paths for s in load_segments(path)]
+    counts = Counter(s.role.casefold() for s in segments)
+    cast = build_cast(engine, project.voices, segments, project.calibration_file)
+    for role, voice in project.voices.items():
+        if not voice:
+            continue
+        if role.casefold() not in cast:
+            what = "aucune réplique repérée" if role == DIALOGUE else "aucun paragraphe attribué"
+            queue.report(job.id, message=f"{role} : {what}, sa voix ne servira pas")
+            continue
+        second, profile = cast[role.casefold()]
+        # Le nom résolu par le moteur, pas celui saisi : c'est lui qui note les pistes.
+        project.voices[role] = second.voice
         queue.report(
-            job.id, message="aucune réplique repérée : la voix des dialogues ne servira pas"
+            job.id,
+            message=f"{role} par {second.voice} ({counts[role.casefold()]} segments), "
+            f"débit calibré à {profile.chars_per_second} car/s",
         )
-    cast = build_cast(engine, project.dialogue_voice, lines, project.calibration_file)
-    second, profile = cast[DIALOGUE]
-    # Le nom résolu par le moteur, pas celui saisi : c'est lui qui note les pistes.
-    project.dialogue_voice = second.voice
-    queue.report(
-        job.id,
-        message=f"dialogues par {second.voice} ({len(lines)} répliques), "
-        f"débit calibré à {profile.chars_per_second} car/s",
-    )
+    voiced = {role.casefold() for role, voice in project.voices.items() if voice}
+    for role in sorted({s.role for s in segments}, key=str.casefold):
+        if role.casefold() not in voiced | {NARRATOR, DIALOGUE}:
+            queue.report(job.id, message=f"{role} n'a pas de voix : le narrateur le lit")
     return cast
 
 
@@ -232,10 +244,6 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     previous = project.signature
     if (wanted := job.params.get("speed")) is not None:
         project.speed = float(wanted)
-    # La voix des dialogues n'est touchée que si la tâche en parle : la ligne de commande
-    # n'en parle pas, l'interface toujours — vide, c'est « le narrateur lit tout ».
-    if "dialogue_voice" in job.params:
-        project.dialogue_voice = job.params["dialogue_voice"] or None
 
     queue.report(job.id, 0.0, f"chargement du moteur {backend} à {project.speed:g}×")
     wake(backend, job, queue)
@@ -243,15 +251,15 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     chosen = getattr(engine, "voice", backend)
     cast = casting(engine, project, paths, job, queue)
 
-    signature = make_signature(backend, chosen, project.speed, project.dialogue_voice)
+    # La note ne porte que les voix qui servent : un persona sans paragraphe n'y change
+    # rien, et n'y changera quelque chose que le jour où le texte le nomme.
+    signature = make_signature(
+        backend, chosen, project.speed, {role: second.voice for role, (second, _) in cast.items()}
+    )
     changed = project.voice is not None and previous != signature
+    if changed and not same_engine(previous, signature):
+        queue.report(job.id, message="réglage différent du précédent : tout est resynthétisé")
     if changed:
-        queue.report(
-            job.id,
-            message="voix changée : seul ce qu'elle disait est resynthétisé"
-            if same_engine(previous, signature)
-            else "réglage différent du précédent : tout est resynthétisé",
-        )
         # Les pistes d'avant la note portent la voix d'avant : on l'écrit sur elles
         # maintenant, tant qu'on la connaît. Une synthèse interrompue les laisserait
         # sinon passer pour à jour à la relance, le projet ayant déjà retenu la nouvelle.
@@ -296,7 +304,14 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
             # ou, pour un manifeste d'avant la distribution, le narrateur d'alors.
             number = int(path.stem.removeprefix("ch"))
             reuse = previous_takes(target, project.timing(number), parse_signature(stamped)[1])
-            queue.report(job.id, message=f"{path.stem} : la piste ne dit plus le texte")
+            # La note de la piste, pas le projet, dit ce qui a changé : l'interface a
+            # déjà retenu la nouvelle distribution quand la tâche démarre.
+            why = (
+                "la piste ne dit plus le texte"
+                if stamped == signature
+                else "voix changée : seul ce qui change de bouche est refait"
+            )
+            queue.report(job.id, message=f"{path.stem} : {why}")
         segments = load_segments(path)
         queue.report(
             job.id,

@@ -497,20 +497,22 @@ class TestDistribution:
 
         project, engine = self.make(tmp_path, monkeypatch)
         queue = Queue(tmp_path / "jobs.sqlite")
-        job = queue.enqueue("p", "synth", backend="faux", dialogue_voice="autre")
+        project.voices = {"dialogue": "autre"}
+        project.save()
+        job = queue.enqueue("p", "synth", backend="faux")
         worker.run_synth(project, job, queue)
 
         assert engine.said == [
             ("voix", "Le soir tombait sur la ferme."),
             ("autre", "On part maintenant, souffla Lulu à son frère."),
         ]
-        assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix+autre@1.00"
-        assert Project.load(project.root).dialogue_voice == "autre"
+        assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix+dialogue=autre@1.00"
+        assert Project.load(project.root).voices == {"dialogue": "autre"}
         assert [(e["role"], e["voice"]) for e in project.timing(1)] == [
             ("narrateur", "voix"),
             ("dialogue", "autre"),
         ]
-        assert "dialogues par autre (1 répliques)" in queue.get(job.id).log
+        assert "dialogue par autre (1 segments)" in queue.get(job.id).log
 
     def test_changer_une_voix_ne_refait_que_ce_qu_elle_disait(self, tmp_path, monkeypatch):
         from voxlibris import worker
@@ -518,36 +520,64 @@ class TestDistribution:
 
         project, engine = self.make(tmp_path, monkeypatch)
         queue = Queue(tmp_path / "jobs.sqlite")
-        worker.run_synth(
-            project, queue.enqueue("p", "synth", backend="faux", dialogue_voice="autre"), queue
-        )
+        project.voices = {"dialogue": "autre"}
+        worker.run_synth(project, queue.enqueue("p", "synth", backend="faux"), queue)
 
         engine.said.clear()
-        job = queue.enqueue("p", "synth", backend="faux", dialogue_voice="tierce")
+        project.voices = {"dialogue": "tierce"}
+        job = queue.enqueue("p", "synth", backend="faux")
         worker.run_synth(project, job, queue)
         assert engine.said == [("tierce", "On part maintenant, souffla Lulu à son frère.")]
         assert [e["reused"] for e in project.timing(1)] == [True, False]
-        assert "voix changée" in queue.get(job.id).log
-        assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix+tierce@1.00"
+        assert "ch01 : voix changée" in queue.get(job.id).log
+        assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix+dialogue=tierce@1.00"
 
         # Retour à une seule voix : le narrateur reprend les répliques, et rien d'autre.
         engine.said.clear()
-        worker.run_synth(
-            project, queue.enqueue("p", "synth", backend="faux", dialogue_voice=""), queue
-        )
+        project.voices = {}
+        worker.run_synth(project, queue.enqueue("p", "synth", backend="faux"), queue)
         assert engine.said == [("voix", "On part maintenant, souffla Lulu à son frère.")]
         assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix@1.00"
 
-    def test_sans_voix_des_dialogues_rien_ne_change(self, tmp_path, monkeypatch):
-        """La ligne de commande ne parle pas de la voix des dialogues : elle reste."""
+    def test_un_persona_du_texte_a_sa_voix(self, tmp_path, monkeypatch):
+        """Les lettres de Charles, marquées dans le texte, passent par la voix de Charles."""
         from voxlibris import worker
+        from voxlibris.normalize import build_segments
+        from voxlibris.project import read_stamp
 
         project, engine = self.make(tmp_path, monkeypatch)
-        project.dialogue_voice = "autre"
+        (project.raw_dir / "ch01.md").write_text(
+            '---\nchapter: 1\ntitle: "Un"\n---\n\nLe facteur a apporté une lettre.\n\n'
+            "@Charles\n\nMa Lulu, nous n'avons pas arrêté de bouger.\n\n"
+            "— Rassemblement ! a crié le lieutenant.\n\n@\n\n"
+            "— Il va bien, ai-je dit à maman.\n",
+            encoding="utf-8",
+        )
+        build_segments(project.raw_dir, project.segments_dir, announce_chapters=False)
+        project.voices = {"charles": "autre", "Inconnu": "tierce"}
+        queue = Queue(tmp_path / "jobs.sqlite")
+        job = queue.enqueue("p", "synth", backend="faux")
+        worker.run_synth(project, job, queue)
+
+        assert [v for v, _ in engine.said] == ["voix", "autre", "autre", "voix"]
+        assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix+charles=autre@1.00"
+        log = queue.get(job.id).log
+        assert "charles par autre (2 segments)" in log
+        assert "Inconnu : aucun paragraphe attribué, sa voix ne servira pas" in log
+
+    def test_un_persona_sans_voix_ne_change_rien(self, tmp_path, monkeypatch):
+        """Un persona nommé sans voix : le narrateur lit tout, la note ne le mentionne pas."""
+        from voxlibris import worker
+        from voxlibris.project import read_stamp
+
+        project, engine = self.make(tmp_path, monkeypatch)
+        project.voices = {"Charles": ""}
         project.save()
         queue = Queue(tmp_path / "jobs.sqlite")
-        worker.run_synth(project, queue.enqueue("p", "synth", backend="faux"), queue)
-        assert [v for v, _ in engine.said] == ["voix", "autre"]
+        job = queue.enqueue("p", "synth", backend="faux")
+        worker.run_synth(project, job, queue)
+        assert [v for v, _ in engine.said] == ["voix", "voix"]
+        assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix@1.00"
 
 
 class TestSignature:
@@ -555,11 +585,20 @@ class TestSignature:
         from voxlibris.project import make_signature, parse_signature, same_engine
 
         alone = make_signature("xtts", "Viktor Menelaos", 0.95)
-        both = make_signature("xtts", "Viktor Menelaos", 0.95, "Ana Florence")
+        both = make_signature(
+            "xtts", "Viktor Menelaos", 0.95, {"Charles": "Damien", "dialogue": "Ana", "x": ""}
+        )
         assert alone == "xtts/Viktor Menelaos@0.95"
-        assert both == "xtts/Viktor Menelaos+Ana Florence@0.95"
-        assert parse_signature(both) == ("xtts", "Viktor Menelaos", "Ana Florence", "0.95")
-        assert parse_signature(alone) == ("xtts", "Viktor Menelaos", None, "0.95")
+        assert both == "xtts/Viktor Menelaos+Charles=Damien+dialogue=Ana@0.95"
+        assert parse_signature(both) == (
+            "xtts",
+            "Viktor Menelaos",
+            {"Charles": "Damien", "dialogue": "Ana"},
+            "0.95",
+        )
+        assert parse_signature(alone) == ("xtts", "Viktor Menelaos", {}, "0.95")
+        # Les premières notes à deux voix n'écrivaient que la voix des dialogues.
+        assert parse_signature("xtts/Viktor+Ana@1.00")[2] == {"dialogue": "Ana"}
         assert same_engine(alone, both)
         assert not same_engine(alone, make_signature("xtts", "Viktor Menelaos", 1.0))
         assert not same_engine(alone, make_signature("kokoro", "Viktor Menelaos", 0.95))

@@ -736,6 +736,7 @@ def review_chapter(request: Request, name: str, number: int, find: str = ""):
         chapter=chapter,
         suspects=suspects,
         reasons=reasons,
+        personas=project.personas(),
         suggestions=[s for s in load_suggestions(project) if s.chapter == path.name],
         numbers=numbers,
         titles=titles,
@@ -827,16 +828,15 @@ def prepare_page(request: Request, name: str):
 
     project = load_project(name)
     preview: list[dict] = []
-    dialogues = 0
-    for index, path in enumerate(sorted(project.segments_dir.glob("ch*.jsonl"))):
-        with path.open(encoding="utf-8") as handle:
+    first = next(iter(sorted(project.segments_dir.glob("ch*.jsonl"))), None)
+    if first:
+        with first.open(encoding="utf-8") as handle:
             for line in handle:
-                if not line.strip():
-                    continue
-                record = json.loads(line)
-                dialogues += record.get("role") == "dialogue"
-                if index == 0 and len(preview) < 8:
-                    preview.append(record)
+                if line.strip():
+                    preview.append(json.loads(line))
+                if len(preview) >= 8:
+                    break
+    roles = project.roles()
     return shell(
         request,
         "project/prepare.html",
@@ -845,7 +845,8 @@ def prepare_page(request: Request, name: str):
         status=project.status(),
         tracks=project.tracks(),
         preview=preview,
-        dialogues=dialogues,
+        dialogues=roles.get("dialogue", 0),
+        personas=[(p, roles[p]) for p in project.personas() if roles.get(p)],
     )
 
 
@@ -923,11 +924,32 @@ def choose_voice(name: str, backend: str = Form(...), voice: str = Form("")):
     if backend not in BACKENDS:
         raise HTTPException(400, "Moteur inconnu")
     project = load_project(name)
-    # La voix des dialogues appartient au moteur : un autre moteur ne la connaît pas.
+    # Les voix de la distribution appartiennent au moteur : un autre moteur ne les
+    # connaît pas. Les personas, eux, restent — ils appartiennent au texte.
     if backend != project.backend:
-        project.dialogue_voice = None
+        project.voices = {persona: "" for persona in project.voices}
     project.backend = backend
     project.voice = voice.strip() or None
+    project.save()
+    return RedirectResponse(f"/projects/{name}/synth", status_code=303)
+
+
+@app.post("/projects/{name}/cast")
+async def choose_cast(request: Request, name: str):
+    """Retient la distribution : pour chaque persona, sa voix — vide, le narrateur le lit.
+
+    Les personas viennent du texte (marqueurs « @Charles ») et de la règle des
+    répliques ; on peut en nommer un nouveau ici avant de lui attribuer des paragraphes
+    dans la Relecture.
+    """
+    project = load_project(name)
+    form = await request.form()
+    voices: dict[str, str] = {}
+    for persona, voice in zip(form.getlist("persona"), form.getlist("voice"), strict=False):
+        persona = str(persona).strip().lstrip("@")
+        if persona and persona.casefold() != "narrateur":
+            voices[persona] = str(voice).strip()
+    project.voices = voices
     project.save()
     return RedirectResponse(f"/projects/{name}/synth", status_code=303)
 
@@ -969,6 +991,8 @@ def synth_page(request: Request, name: str, chapter: int = 0, cause: str = ""):
         speed_range=SPEED_RANGE,
         voxtral_local=voxtral_is_local(),
         jobs=queue.list(name, limit=6),
+        personas=project.personas(),
+        roles=project.roles(),
     )
 
 
@@ -1041,8 +1065,6 @@ async def enqueue_job(request: Request, name: str, kind: str):
         params = {
             "backend": str(form.get("backend") or project.backend or "xtts"),
             "voice": str(form.get("voice") or "") or None,
-            # Toujours transmise : vide, elle rend tout le livre au narrateur.
-            "dialogue_voice": str(form.get("dialogue_voice") or "").strip() or None,
             "force": bool(form.get("force")),
             "speed": _number(form.get("speed"), *SPEED_RANGE),
         }

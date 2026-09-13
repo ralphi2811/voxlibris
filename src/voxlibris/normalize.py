@@ -247,6 +247,24 @@ def role_of(paragraph: str) -> str:
     return DIALOGUE if DIALOGUE_OPENING.match(paragraph) else NARRATOR
 
 
+# Un paragraphe réduit à « @Charles » ne se lit pas : il confie les paragraphes qui
+# suivent à ce persona, jusqu'au prochain marqueur ; « @ » seul rend la parole au
+# narrateur. C'est ce que la Relecture insère quand on attribue une plage — les lettres
+# d'un frère, le journal d'un personnage —, et ça survit à toute correction du texte,
+# puisque c'est le texte lui-même qui le porte.
+PERSONA_MARK = re.compile(r"^@\s*(?P<name>[^\n]*)$")
+
+
+def persona_of(paragraph: str) -> str | None:
+    """Le persona qu'un marqueur désigne ; « » pour le narrateur ; None si ce n'en est
+    pas un."""
+    match = PERSONA_MARK.match(paragraph.strip())
+    if match is None:
+        return None
+    name = match.group("name").strip()
+    return "" if name.casefold() == NARRATOR else name
+
+
 def build_chapter_segments(
     chapter: int,
     title: str,
@@ -273,9 +291,15 @@ def build_chapter_segments(
             {"idx": 0, "text": header, "pause_after_ms": silence(PAUSE_TITLE), "role": NARRATOR}
         )
 
+    reader = ""  # le persona imposé par un marqueur, jusqu'au suivant
     for paragraph in paragraphs:
-        # Le rôle se lit sur le paragraphe brut : la normalisation efface le tiret.
-        role = role_of(paragraph)
+        if (marker := persona_of(paragraph)) is not None:
+            reader = marker
+            continue
+        # Le rôle se lit sur le paragraphe brut : la normalisation efface le tiret. Un
+        # marqueur l'emporte sur la typographie : une réplique citée dans une lettre
+        # reste à celui qui l'écrit.
+        role = reader or role_of(paragraph)
         segments = segment_paragraph(normalize(paragraph))
         for index, (segment, ends_sentence) in enumerate(segments):
             last = index == len(segments) - 1

@@ -276,6 +276,9 @@ def synth(
     dialogue_voice: str = typer.Option(
         None, help="voix des répliques, sur le même moteur ; « - » pour revenir au narrateur"
     ),
+    cast: list[str] = typer.Option(
+        None, help="voix d'un persona du texte, « Charles=Damien » ; « Charles= » la retire"
+    ),
     chapters: str = typer.Option(None, help="liste de numéros, par exemple 1,2,3"),
     force: bool = typer.Option(False, help="resynthétiser même si le WAV existe"),
     speed: float = typer.Option(None, help="débit de parole ; 0.9 pour ralentir"),
@@ -298,22 +301,28 @@ def synth(
     if speed is not None:
         project.speed = speed
     if dialogue_voice is not None:
-        project.dialogue_voice = None if dialogue_voice == "-" else dialogue_voice
+        project.voices["dialogue"] = "" if dialogue_voice == "-" else dialogue_voice
+    for pair in cast or []:
+        persona, _, chosen_voice = pair.partition("=")
+        project.voices[persona.strip()] = chosen_voice.strip()
+    project.voices = {k: v for k, v in project.voices.items() if v}
 
     engine = load(backend, voice, device, project.speed)
     chosen = getattr(engine, "voice", backend)
-    cast = build_cast(
+    troupe = build_cast(
         engine,
-        project.dialogue_voice,
+        project.voices,
         [s for path in paths for s in load_segments(path)],
         project.calibration_file,
     )
-    if cast:
-        project.dialogue_voice = next(iter(cast.values()))[0].voice
+    for role, (second, _) in troupe.items():
+        project.voices[role] = second.voice
 
     # Un changement de voix ou de vitesse invalide tout : sans cela le livre changerait
     # de narrateur — ou de débit — en cours de route, sans le moindre avertissement.
-    signature = make_signature(backend, chosen, project.speed, project.dialogue_voice)
+    signature = make_signature(
+        backend, chosen, project.speed, {role: second.voice for role, (second, _) in troupe.items()}
+    )
     changed = project.voice is not None and previous != signature
     if changed:
         console.print("[yellow]Réglage différent du précédent : tout est resynthétisé.[/yellow]")
@@ -323,7 +332,9 @@ def synth(
     profile = profile_for_voice(engine, load_segments(paths[0]), project.calibration_file)
     console.print(
         f"Moteur [bold]{backend}[/bold], voix [bold]{chosen}[/bold]"
-        + (f", dialogues par [bold]{project.dialogue_voice}[/bold]" if cast else "")
+        + "".join(
+            f", {role} par [bold]{second.voice}[/bold]" for role, (second, _) in troupe.items()
+        )
         + f", vitesse {project.speed:g}×, débit calibré à {profile.chars_per_second} car/s.\n"
     )
 
@@ -335,7 +346,7 @@ def synth(
             continue
         segments = load_segments(path)
         console.print(f"{path.stem} — {segments[0].title} ({len(segments)} segments)")
-        result = synthesize_chapter(engine, segments, profile, cast=cast)
+        result = synthesize_chapter(engine, segments, profile, cast=troupe)
         result.write(target)
         console.print(f"  → {target.name}  {result.duration / 60:.1f} min")
         warnings += result.warnings

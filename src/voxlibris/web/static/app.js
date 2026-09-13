@@ -293,6 +293,36 @@
       });
     });
 
+    // Attribuer une plage de paragraphes à un persona : un marqueur « @Nom » avant, un
+    // « @ » après, portés par le texte lui-même. Les marqueurs déjà présents dans la
+    // plage — et celui qui la précède immédiatement — sont retirés d'abord, pour qu'une
+    // réattribution ne les empile pas.
+    var isMark = function (p) { return /^@/.test(p.trim()); };
+    var paragraphRange = function (start, end) {
+      var v = area.value, s = v.lastIndexOf("\n\n", Math.max(0, start - 1)), e = v.indexOf("\n\n", end);
+      s = s < 0 ? 0 : s + 2; e = e < 0 ? v.length : e;
+      var before = v.lastIndexOf("\n\n", s - 3);
+      if (s > 0 && isMark(v.slice(before < 0 ? 0 : before + 2, s))) s = before < 0 ? 0 : before + 2;
+      var after = v.indexOf("\n\n", e + 2);
+      if (e < v.length && v.slice(e + 2, after < 0 ? v.length : after).trim() === "@") e = after < 0 ? v.length : after;
+      return [s, e];
+    };
+    var assign = function (name) {
+      var r = paragraphRange(area.selectionStart, area.selectionEnd);
+      var block = area.value.slice(r[0], r[1]).split("\n\n").filter(function (p) { return p.trim() && !isMark(p); }).join("\n\n");
+      var open = name ? "@" + name + "\n\n" : "", close = name ? "\n\n@" : "";
+      area.value = area.value.slice(0, r[0]) + open + block + close + area.value.slice(r[1]);
+      select(r[0], open.length + block.length + close.length);
+    };
+    var personaName = document.getElementById("persona-name");
+    var assignButton = document.getElementById("persona-assign"), clearButton = document.getElementById("persona-clear");
+    if (assignButton) assignButton.addEventListener("click", function () {
+      var name = personaName.value.trim().replace(/^@/, "");
+      if (!name) { personaName.focus(); return; }
+      assign(name);
+    });
+    if (clearButton) clearButton.addEventListener("click", function () { assign(""); });
+
     // Rechercher et remplacer, dans la zone de saisie seulement.
     var find = document.getElementById("find"), replace = document.getElementById("replace");
     var locateNext = function () {

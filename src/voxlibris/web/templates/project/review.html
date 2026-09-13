@@ -27,6 +27,14 @@
 <div class="review {% if not chapter.source_pages %}no-page{% endif %}">
   <form class="editor" id="review-form" method="post" action="/projects/{{ name }}/review/{{ chapter.number }}">
     <input class="input serif title-edit big" type="text" name="title" value="{{ chapter.title }}" required>
+    <div class="row cast-tools">
+      <span class="muted small">Lu par</span>
+      <input class="input sm" type="text" id="persona-name" list="persona-options" placeholder="persona, ex. Charles" maxlength="40">
+      <datalist id="persona-options">{% for p in personas %}<option value="{{ p }}">{% endfor %}</datalist>
+      <button class="btn sm" type="button" id="persona-assign" title="Les paragraphes de la sélection sont confiés à ce persona">Attribuer la sélection</button>
+      <button class="btn sm ghost" type="button" id="persona-clear" title="Retire les marqueurs de la sélection">Rendre au narrateur</button>
+      <span class="muted small">Une ligne « @Charles » confie les paragraphes qui suivent à ce persona, jusqu'à une ligne « @ ». Sa voix se choisit dans la <a href="/projects/{{ name }}/synth">distribution</a>.</span>
+    </div>
     <textarea class="serif" name="text" spellcheck="true" lang="{{ project.language }}">{{ chapter.text }}</textarea>
     <p class="muted small">{{ icons.ic("warn", 14) }}Une ligne vide sépare deux paragraphes. La version brute est conservée : Enregistrer écrit la version relue à côté.</p>
   </form>

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -48,23 +50,36 @@ def write_stamp(track: Path, signature: str) -> None:
 
 
 def make_signature(
-    backend: str | None, voice: str | None, speed: float, dialogue_voice: str | None = None
+    backend: str | None,
+    voice: str | None,
+    speed: float,
+    voices: Mapping[str, str] | None = None,
 ) -> str:
     """Moteur, voix et débit — ce qui fait qu'une piste sonne comme les autres.
 
-    La voix des dialogues s'ajoute au narrateur d'un « + » : une piste faite avant qu'on
-    la choisisse n'a donc pas la même note, et sera refaite pour ses répliques.
+    La distribution s'ajoute au narrateur, persona par persona : « +dialogue=Ana
+    +Charles=Damien ». Une piste faite avant qu'on la choisisse n'a donc pas la même
+    note, et sera refaite pour ce que ces voix disent.
     """
-    voices = f"{voice}+{dialogue_voice}" if dialogue_voice else f"{voice}"
-    return f"{backend}/{voices}@{speed:.2f}"
+    others = "".join(
+        f"+{role}={chosen}"
+        for role, chosen in sorted((voices or {}).items(), key=lambda kv: kv[0].casefold())
+        if chosen and role.casefold() != "narrateur"
+    )
+    return f"{backend}/{voice}{others}@{speed:.2f}"
 
 
-def parse_signature(signature: str) -> tuple[str, str, str | None, str]:
-    """Relit une note : moteur, narrateur, voix des dialogues (ou None), vitesse."""
+def parse_signature(signature: str) -> tuple[str, str, dict[str, str], str]:
+    """Relit une note : moteur, narrateur, distribution, vitesse."""
     backend, _, rest = signature.partition("/")
     voices, _, speed = rest.rpartition("@")
-    narrator, _, dialogue = voices.partition("+")
-    return backend, narrator, dialogue or None, speed
+    narrator, *parts = voices.split("+")
+    cast: dict[str, str] = {}
+    for part in parts:
+        # Les premières notes à deux voix n'écrivaient que la voix des dialogues.
+        role, _, chosen = part.partition("=") if "=" in part else ("dialogue", "=", part)
+        cast[role] = chosen
+    return backend, narrator, cast, speed
 
 
 def same_engine(a: str, b: str) -> bool:
@@ -88,9 +103,10 @@ class Project:
     needs_review: bool = False
     backend: str | None = None
     voice: str | None = None
-    # La voix des répliques, sur le même moteur ; None, et le narrateur lit tout. Les
-    # répliques sont les paragraphes ouvrant sur un tiret ou des guillemets.
-    dialogue_voice: str | None = None
+    # La distribution : persona → voix, sur le même moteur. « dialogue » est la voix des
+    # répliques repérées à leur typographie ; les autres noms sont ceux que le texte
+    # porte en marqueurs (« @Charles »). Un persona sans voix est lu par le narrateur.
+    voices: dict[str, str] = field(default_factory=dict)
     # Débit de parole, et étirement de tous les silences. Les moteurs sont réglés pour
     # la phrase de démonstration, pas pour une heure d'écoute : à l'oreille, la lecture
     # court et la ponctuation s'efface. Ces deux réglages sont indépendants — la vitesse
@@ -175,7 +191,7 @@ class Project:
             "needs_review": self.needs_review,
             "backend": self.backend,
             "voice": self.voice,
-            "dialogue_voice": self.dialogue_voice,
+            "voices": self.voices,
             "speed": self.speed,
             "pause_scale": self.pause_scale,
             "announce_chapters": self.announce_chapters,
@@ -191,7 +207,11 @@ class Project:
         config = root / "project.json"
         if not config.exists():
             raise FileNotFoundError(f"{root} n'est pas un projet voxlibris ({config} absent)")
-        return cls(root=root, **json.loads(config.read_text(encoding="utf-8")))
+        data = json.loads(config.read_text(encoding="utf-8"))
+        # Un projet réglé quand la seule seconde voix était celle des dialogues.
+        if dialogue := data.pop("dialogue_voice", None):
+            data.setdefault("voices", {})["dialogue"] = dialogue
+        return cls(root=root, **data)
 
     @classmethod
     def create(cls, root: Path, document: Document) -> Project:
@@ -363,7 +383,25 @@ class Project:
     @property
     def signature(self) -> str:
         """Moteur, voix et débit : ce qui fait qu'une piste sonne comme les autres."""
-        return make_signature(self.backend, self.voice, self.speed, self.dialogue_voice)
+        return make_signature(self.backend, self.voice, self.speed, self.voices)
+
+    def roles(self) -> Counter[str]:
+        """Combien de segments chaque rôle a dans les segments préparés."""
+        counts: Counter[str] = Counter()
+        for path in self.segments_dir.glob("ch*.jsonl"):
+            for line in path.open(encoding="utf-8"):
+                if line.strip():
+                    counts[str(json.loads(line).get("role", "narrateur"))] += 1
+        return counts
+
+    def personas(self) -> list[str]:
+        """Les personas du livre, hors narrateur et dialogues : ceux que le texte nomme,
+        et ceux qu'une voix attend. Un même nom écrit à deux casses ne compte qu'une fois."""
+        seen: dict[str, str] = {}
+        for name in [*self.voices, *self.roles()]:
+            if name.casefold() not in ("narrateur", "dialogue"):
+                seen.setdefault(name.casefold(), name)
+        return sorted(seen.values(), key=str.casefold)
 
     def track_signature(self, number: int) -> str:
         """La signature notée sur une piste ; vide pour une piste d'avant cette note."""
