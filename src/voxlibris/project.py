@@ -47,6 +47,35 @@ def write_stamp(track: Path, signature: str) -> None:
     stamp_path(track).write_text(signature, encoding="utf-8")
 
 
+def make_signature(
+    backend: str | None, voice: str | None, speed: float, dialogue_voice: str | None = None
+) -> str:
+    """Moteur, voix et débit — ce qui fait qu'une piste sonne comme les autres.
+
+    La voix des dialogues s'ajoute au narrateur d'un « + » : une piste faite avant qu'on
+    la choisisse n'a donc pas la même note, et sera refaite pour ses répliques.
+    """
+    voices = f"{voice}+{dialogue_voice}" if dialogue_voice else f"{voice}"
+    return f"{backend}/{voices}@{speed:.2f}"
+
+
+def parse_signature(signature: str) -> tuple[str, str, str | None, str]:
+    """Relit une note : moteur, narrateur, voix des dialogues (ou None), vitesse."""
+    backend, _, rest = signature.partition("/")
+    voices, _, speed = rest.rpartition("@")
+    narrator, _, dialogue = voices.partition("+")
+    return backend, narrator, dialogue or None, speed
+
+
+def same_engine(a: str, b: str) -> bool:
+    """Deux notes du même moteur au même débit : leurs prises sont échangeables, voix
+    par voix. C'est ce qui rend un changement de voix partiel."""
+    if not (a and b):
+        return False
+    first, last = parse_signature(a), parse_signature(b)
+    return (first[0], first[3]) == (last[0], last[3])
+
+
 @dataclass
 class Project:
     root: Path
@@ -59,6 +88,9 @@ class Project:
     needs_review: bool = False
     backend: str | None = None
     voice: str | None = None
+    # La voix des répliques, sur le même moteur ; None, et le narrateur lit tout. Les
+    # répliques sont les paragraphes ouvrant sur un tiret ou des guillemets.
+    dialogue_voice: str | None = None
     # Débit de parole, et étirement de tous les silences. Les moteurs sont réglés pour
     # la phrase de démonstration, pas pour une heure d'écoute : à l'oreille, la lecture
     # court et la ponctuation s'efface. Ces deux réglages sont indépendants — la vitesse
@@ -143,6 +175,7 @@ class Project:
             "needs_review": self.needs_review,
             "backend": self.backend,
             "voice": self.voice,
+            "dialogue_voice": self.dialogue_voice,
             "speed": self.speed,
             "pause_scale": self.pause_scale,
             "announce_chapters": self.announce_chapters,
@@ -330,7 +363,7 @@ class Project:
     @property
     def signature(self) -> str:
         """Moteur, voix et débit : ce qui fait qu'une piste sonne comme les autres."""
-        return f"{self.backend}/{self.voice}@{self.speed:.2f}"
+        return make_signature(self.backend, self.voice, self.speed, self.dialogue_voice)
 
     def track_signature(self, number: int) -> str:
         """La signature notée sur une piste ; vide pour une piste d'avant cette note."""

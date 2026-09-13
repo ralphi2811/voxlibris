@@ -122,14 +122,15 @@ coup d'œil où en est chaque livre et ce qui reste à faire.
 - **Relecture** : le texte face à la page d'origine — image du PDF, ou page de l'EPUB
   rendue avec ses polices —, les formes suspectes filtrées par cause, les propositions
   du modèle acceptées ou écartées une à une, rechercher-remplacer.
-- **Préparation** : silences, annonce des chapitres, et les segments tels qu'ils partent
-  au moteur. Une piste est à jour quand elle dit exactement le texte de ses segments,
+- **Préparation** : silences, annonce des chapitres, répliques repérées, et les segments
+  tels qu'ils partent au moteur. Une piste est à jour quand elle dit exactement le texte de ses segments,
   avec la voix du livre. Un chapitre corrigé après coup est signalé, avec la marche à
   suivre : relancer la synthèse — qui refait d'abord la préparation, puis ne repasse au
   moteur que les segments dont le texte a changé —, et réassembler.
 - **Voix** : les moteurs que l'installation offre, avec leur licence, un banc d'essai sur
   le même extrait, le dépôt d'un extrait à cloner, le coût du livre entier par moteur.
-- **Synthèse** : réglages, avancement segment par segment, bouton d'arrêt, et le tableau
+- **Synthèse** : réglages — moteur, narrateur, voix des dialogues, vitesse —, avancement
+  segment par segment, bouton d'arrêt, et le tableau
   des **segments à l'oreille** — instant, cause, le passage autour, écouter, corriger,
   rejouer, valider. Rejouer un segment le recolle dans sa piste sans refaire le
   chapitre ; le valider le garde tel quel, l'oreille ayant le dernier mot.
@@ -155,6 +156,20 @@ sa carte graphique, ses moteurs, et l'état des serveurs qu'il garde.
 
 Les trois premiers vivent dans l'atelier ; les trois autres sont des serveurs à part,
 sous profil, que l'atelier réveille à la demande.
+
+### Deux voix : le récit et les répliques
+
+Un livre peut être lu à deux voix, sur le même moteur : le narrateur pour le récit, une
+autre pour les dialogues. Les répliques sont reconnues à leur typographie — les
+paragraphes qui ouvrent sur un tiret ou des guillemets —, sans rien deviner de plus :
+une réplique nichée dans un paragraphe de récit reste au narrateur, et l'incise
+« dit-elle » suit sa réplique. La page Préparation compte les répliques repérées et les
+marque dans l'aperçu ; la voix des dialogues se choisit sur la page Synthèse, dans le
+catalogue du moteur — une voix clonée, avec OmniVoice ou ZONOS2. Le champ vide rend le
+livre au narrateur seul.
+
+Changer une voix ne refait que ce qu'elle disait : le manifeste de chaque piste note qui
+a dit chaque segment, et l'autre voix est reprise telle quelle.
 
 ### Cloner une voix : OmniVoice et ZONOS2
 
@@ -301,6 +316,9 @@ docker compose run --rm worker voxlibris ingest /data/livre.epub /data/projet
 docker compose run --rm worker voxlibris synth /data/projet --backend kokoro
 docker compose run --rm worker voxlibris assemble /data/projet
 ```
+
+`synth --dialogue-voice "Ana Florence"` confie les répliques à une seconde voix du même
+moteur ; `--dialogue-voice -` revient au narrateur seul.
 
 La ligne de commande vise la carte par défaut : sans carte, ajoutez `--device cpu` à
 `synth`. `voxlibris run livre.epub projet/` enchaîne le tout, et refuse de le faire pour un

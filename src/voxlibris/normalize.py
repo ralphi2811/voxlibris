@@ -232,6 +232,21 @@ def main() -> None:
     print(f"\n{sum(counts.values())} segments au total.")
 
 
+# Qui lit un segment : le narrateur, ou la voix des dialogues. En typographie française,
+# une réplique ouvre son paragraphe par un tiret ou des guillemets ; c'est ce que l'on
+# reconnaît ici, sans rien deviner de plus. Une réplique nichée dans un paragraphe de
+# récit (« Lulu répondit : "Non !" ») reste au narrateur — c'est le niveau suivant.
+NARRATOR = "narrateur"
+DIALOGUE = "dialogue"
+# Le tiret doit ouvrir sur une lettre ou un espace : collé à un chiffre, c'est un moins.
+DIALOGUE_OPENING = re.compile(r'^\s*(?:[—–-](?=\s|[^\W\d])|[«“"])')
+
+
+def role_of(paragraph: str) -> str:
+    """Dit quelle voix lit ce paragraphe, d'après son ouverture."""
+    return DIALOGUE if DIALOGUE_OPENING.match(paragraph) else NARRATOR
+
+
 def build_chapter_segments(
     chapter: int,
     title: str,
@@ -254,9 +269,13 @@ def build_chapter_segments(
 
     records: list[dict[str, object]] = []
     if announce_chapter and (header := announce(chapter, title, single)):
-        records.append({"idx": 0, "text": header, "pause_after_ms": silence(PAUSE_TITLE)})
+        records.append(
+            {"idx": 0, "text": header, "pause_after_ms": silence(PAUSE_TITLE), "role": NARRATOR}
+        )
 
     for paragraph in paragraphs:
+        # Le rôle se lit sur le paragraphe brut : la normalisation efface le tiret.
+        role = role_of(paragraph)
         segments = segment_paragraph(normalize(paragraph))
         for index, (segment, ends_sentence) in enumerate(segments):
             last = index == len(segments) - 1
@@ -274,6 +293,7 @@ def build_chapter_segments(
                     "idx": len(records),
                     "text": text,
                     "pause_after_ms": silence(base) + silence(extra_pause),
+                    "role": role,
                 }
             )
 

@@ -9,12 +9,13 @@ chapitre concaténé, et décisif pour corriger les artefacts que seule l'oreill
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
+from ..normalize import DIALOGUE, NARRATOR
 from .backends import Backend
 from .quality import SAMPLE_RATE, QualityProfile, Take, calibrate, render_with_fallback
 from .voxtral import Refused
@@ -33,6 +34,8 @@ class Segment:
     pause_after_ms: int
     chapter: int
     title: str
+    # Qui le lit : le narrateur, ou la voix des dialogues — voir `normalize.role_of`.
+    role: str = NARRATOR
 
 
 def load_segments(path: Path) -> list[Segment]:
@@ -44,9 +47,35 @@ def load_segments(path: Path) -> list[Segment]:
             pause_after_ms=r["pause_after_ms"],
             chapter=r["chapter"],
             title=r["title"],
+            # Des segments préparés avant la distribution des voix : tout au narrateur.
+            role=r.get("role", NARRATOR),
         )
         for r in records
     ]
+
+
+# La distribution : pour chaque rôle, le moteur qui le dit et le contrôle qualité calibré
+# sur sa voix. Un rôle absent revient au narrateur.
+Cast = Mapping[str, tuple[Backend, QualityProfile]]
+
+
+def build_cast(
+    engine: Backend,
+    dialogue_voice: str | None,
+    segments: Iterable[Segment],
+    store: Path,
+) -> dict[str, tuple[Backend, QualityProfile]]:
+    """Prépare la voix des dialogues : le même moteur, une autre voix, son propre débit.
+
+    Le débit est calibré sur des répliques, pas sur du récit : c'est bien ce que cette
+    voix dira. Sans voix de dialogue, la distribution est vide et tout revient au
+    narrateur — le livre sonne comme avant.
+    """
+    if not dialogue_voice:
+        return {}
+    second = engine.cast(dialogue_voice)
+    lines = [s for s in segments if s.role == DIALOGUE]
+    return {DIALOGUE: (second, profile_for_voice(second, lines, store))}
 
 
 @dataclass
@@ -73,23 +102,29 @@ class ChapterResult:
         )
 
 
-def previous_takes(track: Path, timing: list[dict]) -> Callable[[str], Take | None]:
+def previous_takes(
+    track: Path, timing: list[dict], voice: str = ""
+) -> Callable[[str, str], Take | None]:
     """Les segments propres d'une piste déjà synthétisée, retrouvables par leur texte.
 
     Un mot corrigé dans un chapitre ne doit pas coûter le chapitre entier : tout segment
     dont le texte n'a pas bougé est repris tel quel de la piste précédente, découpé
     d'après son manifeste. Les segments signalés ne sont pas repris — c'est l'occasion
     de les rejouer. La piste n'est lue que si un segment est effectivement repris.
+
+    Une prise n'est reprise que pour la même voix : changer celle des dialogues refait
+    les répliques et garde le récit. `voice` est celle des manifestes d'avant la
+    distribution, qui ne la notaient pas — la seule voix qu'ils connaissaient.
     """
     known = {
-        str(entry["text"]): entry
+        (str(entry["text"]), str(entry.get("voice") or voice)): entry
         for entry in timing
         if entry.get("clean", True) and entry.get("text") and entry["end"] > entry["start"]
     }
     audio: list[np.ndarray] = []
 
-    def lookup(text: str) -> Take | None:
-        entry = known.get(text)
+    def lookup(text: str, spoken_by: str = "") -> Take | None:
+        entry = known.get((text, spoken_by or voice))
         if entry is None:
             return None
         if not audio:
@@ -112,16 +147,20 @@ def synthesize_chapter(
     segments: Iterable[Segment],
     profile: QualityProfile | None = None,
     on_segment: Callable[[Segment, float, int], None] = lambda *_: None,
-    reuse: Callable[[str], Take | None] | None = None,
+    reuse: Callable[[str, str], Take | None] | None = None,
     lead_in_ms: int = LEAD_IN_MS,
+    cast: Cast | None = None,
 ) -> ChapterResult:
     """Synthétise et concatène un chapitre, en signalant les segments douteux.
 
-    `reuse` propose, pour un texte, une prise déjà faite : elle est alors reprise sans
-    passer par le moteur — voir `previous_takes`. `lead_in_ms` est le silence en tête ;
-    zéro pour un fragment destiné à être recollé dans une piste, ou un échantillon.
+    `reuse` propose, pour un texte et une voix, une prise déjà faite : elle est alors
+    reprise sans passer par le moteur — voir `previous_takes`. `lead_in_ms` est le
+    silence en tête ; zéro pour un fragment destiné à être recollé dans une piste, ou un
+    échantillon. `cast` donne, par rôle, le moteur et le profil qui remplacent ceux par
+    défaut — voir `build_cast`.
     """
     profile = profile or QualityProfile()
+    cast = cast or {}
     lead_in = np.zeros(int(SAMPLE_RATE * lead_in_ms / 1000), np.float32)
     pieces: list[np.ndarray] = [lead_in]
     timing: list[dict] = []
@@ -129,12 +168,14 @@ def synthesize_chapter(
     cursor = len(lead_in)
 
     for segment in segments:
-        reused = reuse(segment.text) if reuse else None
+        engine, profile_of = cast.get(segment.role, (backend, profile))
+        voice = str(getattr(engine, "voice", "") or "")
+        reused = reuse(segment.text, voice) if reuse else None
         try:
             if reused is not None:
                 take, split = reused, False
             else:
-                take, split = render_with_fallback(backend.say, segment.text, profile)
+                take, split = render_with_fallback(engine.say, segment.text, profile_of)
         except Refused as refus:
             # Un moteur distant peut refuser une phrase, et il refusera les mêmes à
             # chaque tentative. Abandonner tout le livre pour autant serait absurde :
@@ -148,7 +189,7 @@ def synthesize_chapter(
         if not take.clean:
             warnings.append(
                 f"ch{segment.chapter:02d} segment {segment.idx} ({take.cause}) : "
-                f"{take.duration:.1f}s pour {profile.expected(segment.text):.1f}s "
+                f"{take.duration:.1f}s pour {profile_of.expected(segment.text):.1f}s "
                 f"attendues après {take.attempts} essais — « {segment.text[:60]} »"
             )
 
@@ -167,6 +208,10 @@ def synthesize_chapter(
                 "text": segment.text,
                 # Repris de la piste précédente, sans passer par le moteur.
                 "reused": reused is not None,
+                # Qui l'a dit : c'est ce qui permet de ne refaire, à la prochaine
+                # synthèse, que ce qu'une voix changée disait.
+                "role": segment.role,
+                "voice": voice,
             }
         )
         cursor += len(take.audio) + len(pause)

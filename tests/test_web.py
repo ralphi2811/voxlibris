@@ -288,6 +288,25 @@ class TestPisteAJour:
         segments.write_text('{"idx": 0, "text": "Un et deux."}\n')
         assert not track_is_current(track, segments)
 
+    def test_une_piste_qui_change_de_bouche_n_est_pas_a_jour(self, tmp_path):
+        """Le tiret ajouté ne change pas le texte prononcé, mais qui le dit."""
+        import json
+
+        from voxlibris.worker import track_is_current
+
+        segments, track = tmp_path / "ch01.jsonl", tmp_path / "ch01.wav"
+        track.write_bytes(b"RIFF")
+        track.with_suffix(".timing.json").write_text(
+            json.dumps([{"idx": 0, "text": "Viens.", "role": "narrateur"}])
+        )
+        segments.write_text('{"idx": 0, "text": "Viens.", "role": "narrateur"}\n')
+        assert track_is_current(track, segments)
+        segments.write_text('{"idx": 0, "text": "Viens.", "role": "dialogue"}\n')
+        assert not track_is_current(track, segments)
+        # Un manifeste d'avant la distribution ne connaît pas les rôles : le texte suffit.
+        track.with_suffix(".timing.json").write_text(json.dumps([{"idx": 0, "text": "Viens."}]))
+        assert track_is_current(track, segments)
+
     def test_une_piste_d_une_autre_voix_n_est_pas_a_jour(self, tmp_path):
         import json
 
@@ -732,3 +751,67 @@ class TestStatique:
         page = client.get("/").text
         assert re.search(r'/static/app\.js\?v=[0-9a-f]{10}"', page)
         assert re.search(r'/static/style\.css\?v=[0-9a-f]{10}"', page)
+
+
+class TestDistribution:
+    def make(self, client, make_epub):
+        import json
+
+        from voxlibris.web import app as app_module
+
+        path = make_epub(["Le départ"])
+        with path.open("rb") as handle:
+            client.post("/projects", files={"file": (path.name, handle)})
+        name = next(iter(app_module.workspace().iterdir())).name
+        project = app_module.load_project(name)
+        project.segments_dir.mkdir(parents=True, exist_ok=True)
+        (project.segments_dir / "ch01.jsonl").write_text(
+            "\n".join(
+                json.dumps(
+                    {
+                        "idx": i,
+                        "text": t,
+                        "pause_after_ms": 0,
+                        "chapter": 1,
+                        "title": "Le départ",
+                        "role": r,
+                    }
+                )
+                for i, (t, r) in enumerate(
+                    [("Il faisait beau.", "narrateur"), ("On y va, dit Lulu.", "dialogue")]
+                )
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return name, project
+
+    def test_la_preparation_montre_les_repliques(self, client, make_epub):
+        name, _ = self.make(client, make_epub)
+        page = client.get(f"/projects/{name}/prepare").text
+        assert page.count(">dialogue</span>") == 1
+        assert "1 répliques repérées" in page
+
+    def test_la_voix_des_dialogues_part_avec_la_tache(self, client, make_epub):
+        from voxlibris.web import app as app_module
+
+        name, _ = self.make(client, make_epub)
+        page = client.get(f"/projects/{name}/synth").text
+        assert 'name="dialogue_voice"' in page
+        client.post(
+            f"/projects/{name}/jobs/synth",
+            data={"backend": "kokoro", "voice": "a", "dialogue_voice": " b "},
+        )
+        job = app_module.queue.active(name)
+        assert job is not None and job.params["dialogue_voice"] == "b"
+
+    def test_changer_de_moteur_oublie_la_voix_des_dialogues(self, client, make_epub):
+        from voxlibris.web import app as app_module
+
+        name, project = self.make(client, make_epub)
+        project.backend, project.voice, project.dialogue_voice = "xtts", "Viktor", "Ana"
+        project.save()
+        client.post(f"/projects/{name}/voice", data={"backend": "xtts", "voice": "Damien"})
+        assert app_module.load_project(name).dialogue_voice == "Ana"
+        client.post(f"/projects/{name}/voice", data={"backend": "kokoro", "voice": "ff_siwis"})
+        assert app_module.load_project(name).dialogue_voice is None

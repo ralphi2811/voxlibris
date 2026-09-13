@@ -18,6 +18,7 @@ Voxtral est aussi le seul moteur distant : il envoie le texte du livre chez Mist
 
 from __future__ import annotations
 
+import copy
 import os
 from collections.abc import Sequence
 from pathlib import Path
@@ -129,6 +130,20 @@ class Backend:
     def voices() -> list[str]:
         raise NotImplementedError
 
+    def cast(self, voice: str) -> Backend:
+        """Le même moteur, déjà chargé, parlant d'une autre voix.
+
+        C'est ce qui permet de distribuer un livre — le récit à une voix, les répliques
+        à une autre — sans charger deux fois le modèle : le jumeau partage tout, sauf
+        la voix. Un moteur qui charge un modèle par voix la surcharge.
+        """
+        resolved = resolve_voice(voice, self.voices())
+        if resolved is None:
+            raise UnknownVoice(self.name, voice, self.voices())
+        twin = copy.copy(self)
+        twin.voice = resolved
+        return twin
+
 
 class XttsBackend(Backend):
     """XTTS-v2 — meilleure prosodie en français, GPU, licence CPML non commerciale."""
@@ -228,6 +243,13 @@ class PiperBackend(Backend):
         device: str | None = None,
         speed: float = DEFAULT_SPEED,
     ) -> None:
+        self.voice = voice
+        self.speed = clamp_speed(speed)
+        self._voice = self._model(voice)
+        self.sample_rate = self._voice.config.sample_rate
+
+    @staticmethod
+    def _model(voice: str):
         from piper import PiperVoice
         from piper.download_voices import download_voice
 
@@ -238,15 +260,18 @@ class PiperBackend(Backend):
         model = directory / f"{voice}.onnx"
         if not model.exists():
             download_voice(voice, directory)
-
-        self.voice = voice
-        self.speed = clamp_speed(speed)
-        self._voice = PiperVoice.load(model)
-        self.sample_rate = self._voice.config.sample_rate
+        return PiperVoice.load(model)
 
     @staticmethod
     def voices() -> list[str]:
         return list(PIPER_VOICES)
+
+    def cast(self, voice: str) -> Backend:
+        # Chez Piper, une voix est un modèle : le jumeau charge le sien.
+        twin = super().cast(voice)
+        twin._voice = self._model(twin.voice)  # type: ignore[attr-defined]
+        twin.sample_rate = twin._voice.config.sample_rate  # type: ignore[attr-defined]
+        return twin
 
     def say(self, text: str) -> np.ndarray:
         # Piper raisonne en échelle de durée : allonger les phonèmes ralentit la parole.

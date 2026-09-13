@@ -827,14 +827,16 @@ def prepare_page(request: Request, name: str):
 
     project = load_project(name)
     preview: list[dict] = []
-    first = next(iter(sorted(project.segments_dir.glob("ch*.jsonl"))), None)
-    if first:
-        with first.open(encoding="utf-8") as handle:
+    dialogues = 0
+    for index, path in enumerate(sorted(project.segments_dir.glob("ch*.jsonl"))):
+        with path.open(encoding="utf-8") as handle:
             for line in handle:
-                if line.strip():
-                    preview.append(json.loads(line))
-                if len(preview) >= 8:
-                    break
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                dialogues += record.get("role") == "dialogue"
+                if index == 0 and len(preview) < 8:
+                    preview.append(record)
     return shell(
         request,
         "project/prepare.html",
@@ -843,6 +845,7 @@ def prepare_page(request: Request, name: str):
         status=project.status(),
         tracks=project.tracks(),
         preview=preview,
+        dialogues=dialogues,
     )
 
 
@@ -920,6 +923,9 @@ def choose_voice(name: str, backend: str = Form(...), voice: str = Form("")):
     if backend not in BACKENDS:
         raise HTTPException(400, "Moteur inconnu")
     project = load_project(name)
+    # La voix des dialogues appartient au moteur : un autre moteur ne la connaît pas.
+    if backend != project.backend:
+        project.dialogue_voice = None
     project.backend = backend
     project.voice = voice.strip() or None
     project.save()
@@ -1035,6 +1041,8 @@ async def enqueue_job(request: Request, name: str, kind: str):
         params = {
             "backend": str(form.get("backend") or project.backend or "xtts"),
             "voice": str(form.get("voice") or "") or None,
+            # Toujours transmise : vide, elle rend tout le livre au narrateur.
+            "dialogue_voice": str(form.get("dialogue_voice") or "").strip() or None,
             "force": bool(form.get("force")),
             "speed": _number(form.get("speed"), *SPEED_RANGE),
         }

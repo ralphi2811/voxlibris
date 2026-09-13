@@ -206,3 +206,30 @@ class TestReecriture:
         )
         build_segments(text_dir, out_dir)
         assert target.read_bytes() != before
+
+
+class TestDistribution:
+    """Qui lit quoi : les répliques ouvrent leur paragraphe par un tiret ou des guillemets."""
+
+    def test_le_tiret_et_les_guillemets_font_une_replique(self):
+        assert N.role_of("— Viens, dit-elle, on va être en retard.") == N.DIALOGUE
+        assert N.role_of("– Non.") == N.DIALOGUE
+        assert N.role_of("- Si.") == N.DIALOGUE
+        assert N.role_of("« Alors ? » demanda-t-il.") == N.DIALOGUE
+        assert N.role_of("“Alors ?” demanda-t-il.") == N.DIALOGUE
+
+    def test_le_recit_reste_au_narrateur(self):
+        assert N.role_of("Lulu répondit : « Non ! »") == N.NARRATOR
+        assert N.role_of("Le gardien du phare notait la couleur du ciel.") == N.NARRATOR
+        # Un tiret collé à un nombre est un signe moins, pas un dialogue.
+        assert N.role_of("-12 degrés ce matin-là.") == N.NARRATOR
+
+    def test_les_segments_portent_leur_role(self):
+        records = N.build_chapter_segments(
+            2,
+            "La fuite",
+            ["Le soir tombait sur la ferme abandonnée.", "— On part maintenant, souffla Lulu."],
+        )
+        assert [r["role"] for r in records] == [N.NARRATOR, N.NARRATOR, N.DIALOGUE]
+        # Le tiret est effacé du texte prononcé : seul le rôle en garde la trace.
+        assert records[2]["text"].startswith("On part")

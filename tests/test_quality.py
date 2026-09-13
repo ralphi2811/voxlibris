@@ -191,3 +191,90 @@ class TestPiste:
         assert result.timing[0]["start"] == pytest.approx(lead, abs=0.01)
         assert result.duration == pytest.approx(lead + len(segment.text) / 18 + 0.38, abs=0.05)
         assert not np.any(result.audio[: int(quality.SAMPLE_RATE * lead) - 1])
+
+
+class TestDistribution:
+    """Deux voix sur un même moteur : chaque rôle passe par la sienne, et le manifeste
+    note qui a parlé — c'est ce qui rend un changement de voix partiel."""
+
+    @staticmethod
+    def engines():
+        from types import SimpleNamespace
+
+        said: dict[str, list[str]] = {"narrateur": [], "dialogue": []}
+        narrator = SimpleNamespace(
+            voice="Viktor", say=lambda t: said["narrateur"].append(t) or speech(len(t) / 18)
+        )
+        actor = SimpleNamespace(
+            voice="Ana", say=lambda t: said["dialogue"].append(t) or speech(len(t) / 18)
+        )
+        return narrator, actor, said
+
+    def test_chaque_role_passe_par_sa_voix(self):
+        from voxlibris.tts import synth
+
+        narrator, actor, said = self.engines()
+        segments = [
+            synth.Segment(0, "Le gardien du phare notait la couleur du ciel.", 380, 1, ""),
+            synth.Segment(1, "Regarde, la mer est toute grise ce matin.", 380, 1, "", "dialogue"),
+        ]
+        result = synth.synthesize_chapter(
+            narrator, segments, PROFILE, cast={"dialogue": (actor, PROFILE)}
+        )  # type: ignore[arg-type]
+        assert said["narrateur"] == [segments[0].text]
+        assert said["dialogue"] == [segments[1].text]
+        assert [(e["role"], e["voice"]) for e in result.timing] == [
+            ("narrateur", "Viktor"),
+            ("dialogue", "Ana"),
+        ]
+
+    def test_sans_distribution_le_narrateur_lit_tout(self):
+        from voxlibris.tts import synth
+
+        narrator, _, said = self.engines()
+        segment = synth.Segment(
+            0, "Regarde, la mer est toute grise ce matin.", 380, 1, "", "dialogue"
+        )
+        synth.synthesize_chapter(narrator, [segment], PROFILE)  # type: ignore[arg-type]
+        assert said["narrateur"] == [segment.text]
+
+    def test_une_prise_n_est_reprise_que_pour_la_meme_voix(self, tmp_path):
+        import soundfile as sf
+
+        from voxlibris.tts import synth
+
+        track = tmp_path / "ch01.wav"
+        sf.write(track, speech(3.0), SAMPLE_RATE)
+        timing = [
+            {"idx": 0, "start": 0.0, "end": 1.0, "clean": True, "text": "Un.", "voice": "Viktor"},
+            {"idx": 1, "start": 1.0, "end": 2.0, "clean": True, "text": "Deux.", "voice": "Ana"},
+            {"idx": 2, "start": 2.0, "end": 3.0, "clean": True, "text": "Trois."},
+        ]
+        lookup = synth.previous_takes(track, timing, voice="Viktor")
+        assert lookup("Un.", "Viktor") is not None
+        assert lookup("Un.", "Ana") is None
+        assert lookup("Deux.", "Ana") is not None
+        # Une entrée d'avant la distribution est celle de la voix d'alors.
+        assert lookup("Trois.", "Viktor") is not None
+        assert lookup("Trois.", "Ana") is None
+
+
+class TestJumeau:
+    def test_le_jumeau_partage_le_modele_et_change_de_voix(self):
+        from voxlibris.tts.backends import Backend, UnknownVoice
+
+        class Faux(Backend):
+            name = "faux"
+
+            def __init__(self):
+                self.voice, self.model = "Viktor", object()
+
+            def voices(self):  # type: ignore[override]
+                return ["Ana Florence", "Viktor Menelaos"]
+
+        engine = Faux()
+        twin = engine.cast("ana")
+        assert twin.voice == "Ana Florence"
+        assert twin.model is engine.model and engine.voice == "Viktor"
+        with pytest.raises(UnknownVoice):
+            engine.cast("personne")

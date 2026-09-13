@@ -121,6 +121,10 @@
         <datalist id="synth-voices"></datalist>
         <a class="muted small" href="/projects/{{ name }}/voices">{{ icons.ic("ear", 12) }} Comparer des voix</a>
       </div>
+      <div class="field"><span>Voix des dialogues</span>
+        <input class="input" type="text" name="dialogue_voice" id="synth-dialogue-voice" list="synth-voices" value="{{ project.dialogue_voice or '' }}" placeholder="la même que le narrateur">
+        <span class="muted small">Les répliques — les paragraphes ouvrant sur un tiret ou des guillemets — sont lues par cette voix du même moteur, le récit par le narrateur. Vide : une seule voix, comme avant.</span>
+      </div>
       <div class="field">
         <div class="row"><span>Vitesse</span><span class="spacer"></span><output class="mono" id="speed-out">{{ "%.2f"|format(project.speed) }}×</output></div>
         <input type="range" name="speed" min="{{ speed_range[0] }}" max="{{ speed_range[1] }}" step="0.05" value="{{ project.speed }}" data-out="speed-out" data-suffix="×">

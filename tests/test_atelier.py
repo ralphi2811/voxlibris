@@ -442,3 +442,125 @@ class TestReprise:
         assert "repréparés d'abord" in queue.get(job.id).log
         # Les segments n'ayant pas changé, la piste est reconnue à jour.
         assert "déjà synthétisé" in queue.get(job.id).log
+
+
+class TestDistribution:
+    """Deux voix sur un même moteur, et ce que coûte d'en changer une."""
+
+    @staticmethod
+    def make(tmp_path, monkeypatch):
+        from voxlibris.normalize import build_segments
+        from voxlibris.tts.quality import SAMPLE_RATE
+
+        project = make_project(tmp_path / "p")
+        (project.raw_dir / "ch01.md").write_text(
+            '---\nchapter: 1\ntitle: "Un"\n---\n\nLe soir tombait sur la ferme.\n\n'
+            "— On part maintenant, souffla Lulu à son frère.\n",
+            encoding="utf-8",
+        )
+        (project.raw_dir / "ch02.md").unlink()
+        project.backend, project.voice, project.announce_chapters = "faux", "voix", False
+        project.save()
+        build_segments(project.raw_dir, project.segments_dir, announce_chapters=False)
+
+        class FakeEngine:
+            name, speed, sample_rate, supports_speed = "faux", 1.0, SAMPLE_RATE, True
+            said: list[tuple[str, str]] = []
+
+            def __init__(self, voice="voix"):
+                self.voice = voice
+
+            def voices(self):
+                return ["voix", "autre", "tierce"]
+
+            def cast(self, voice):
+                assert voice in self.voices()
+                return FakeEngine(voice)
+
+            def say(self, text):
+                # Une durée au débit calibré, sans quoi le contrôle qualité rejoue tout.
+                FakeEngine.said.append((self.voice, text))
+                return np.full(SAMPLE_RATE * len(text) // 10, 0.9, np.float32)
+
+        monkeypatch.setattr("voxlibris.tts.backends.load", lambda *a, **k: FakeEngine())
+        monkeypatch.setattr(
+            "voxlibris.tts.synth.profile_for_voice",
+            lambda *a, **k: __import__(
+                "voxlibris.tts.quality", fromlist=["QualityProfile"]
+            ).QualityProfile(chars_per_second=10),
+        )
+        return project, FakeEngine
+
+    def test_les_repliques_passent_par_la_voix_des_dialogues(self, tmp_path, monkeypatch):
+        from voxlibris import worker
+        from voxlibris.project import Project, read_stamp
+
+        project, engine = self.make(tmp_path, monkeypatch)
+        queue = Queue(tmp_path / "jobs.sqlite")
+        job = queue.enqueue("p", "synth", backend="faux", dialogue_voice="autre")
+        worker.run_synth(project, job, queue)
+
+        assert engine.said == [
+            ("voix", "Le soir tombait sur la ferme."),
+            ("autre", "On part maintenant, souffla Lulu à son frère."),
+        ]
+        assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix+autre@1.00"
+        assert Project.load(project.root).dialogue_voice == "autre"
+        assert [(e["role"], e["voice"]) for e in project.timing(1)] == [
+            ("narrateur", "voix"),
+            ("dialogue", "autre"),
+        ]
+        assert "dialogues par autre (1 répliques)" in queue.get(job.id).log
+
+    def test_changer_une_voix_ne_refait_que_ce_qu_elle_disait(self, tmp_path, monkeypatch):
+        from voxlibris import worker
+        from voxlibris.project import read_stamp
+
+        project, engine = self.make(tmp_path, monkeypatch)
+        queue = Queue(tmp_path / "jobs.sqlite")
+        worker.run_synth(
+            project, queue.enqueue("p", "synth", backend="faux", dialogue_voice="autre"), queue
+        )
+
+        engine.said.clear()
+        job = queue.enqueue("p", "synth", backend="faux", dialogue_voice="tierce")
+        worker.run_synth(project, job, queue)
+        assert engine.said == [("tierce", "On part maintenant, souffla Lulu à son frère.")]
+        assert [e["reused"] for e in project.timing(1)] == [True, False]
+        assert "voix changée" in queue.get(job.id).log
+        assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix+tierce@1.00"
+
+        # Retour à une seule voix : le narrateur reprend les répliques, et rien d'autre.
+        engine.said.clear()
+        worker.run_synth(
+            project, queue.enqueue("p", "synth", backend="faux", dialogue_voice=""), queue
+        )
+        assert engine.said == [("voix", "On part maintenant, souffla Lulu à son frère.")]
+        assert read_stamp(project.wav_dir / "ch01.wav") == "faux/voix@1.00"
+
+    def test_sans_voix_des_dialogues_rien_ne_change(self, tmp_path, monkeypatch):
+        """La ligne de commande ne parle pas de la voix des dialogues : elle reste."""
+        from voxlibris import worker
+
+        project, engine = self.make(tmp_path, monkeypatch)
+        project.dialogue_voice = "autre"
+        project.save()
+        queue = Queue(tmp_path / "jobs.sqlite")
+        worker.run_synth(project, queue.enqueue("p", "synth", backend="faux"), queue)
+        assert [v for v, _ in engine.said] == ["voix", "autre"]
+
+
+class TestSignature:
+    def test_la_note_se_relit(self):
+        from voxlibris.project import make_signature, parse_signature, same_engine
+
+        alone = make_signature("xtts", "Viktor Menelaos", 0.95)
+        both = make_signature("xtts", "Viktor Menelaos", 0.95, "Ana Florence")
+        assert alone == "xtts/Viktor Menelaos@0.95"
+        assert both == "xtts/Viktor Menelaos+Ana Florence@0.95"
+        assert parse_signature(both) == ("xtts", "Viktor Menelaos", "Ana Florence", "0.95")
+        assert parse_signature(alone) == ("xtts", "Viktor Menelaos", None, "0.95")
+        assert same_engine(alone, both)
+        assert not same_engine(alone, make_signature("xtts", "Viktor Menelaos", 1.0))
+        assert not same_engine(alone, make_signature("kokoro", "Viktor Menelaos", 0.95))
+        assert not same_engine("", alone)

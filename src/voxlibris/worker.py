@@ -22,8 +22,15 @@ from . import atelier
 from .assemble import build
 from .concierge import Concierge
 from .config import setting
-from .normalize import build_segments
-from .project import Project, read_stamp, write_stamp
+from .normalize import DIALOGUE, build_segments
+from .project import (
+    Project,
+    make_signature,
+    parse_signature,
+    read_stamp,
+    same_engine,
+    write_stamp,
+)
 from .web.jobs import Cancelled, Job, Queue, default_queue, workspace
 
 logger = logging.getLogger("voxlibris.worker")
@@ -112,7 +119,16 @@ def track_is_current(track: Path, segments: Path, signature: str = "") -> bool:
         return False
     said = [(int(e.get("idx", 0)), str(e.get("text", ""))) for e in timing]
     wanted = [(int(r.get("idx", 0)), str(r.get("text", ""))) for r in records]
-    return bool(said) and said == wanted
+    if not said or said != wanted:
+        return False
+    # Même texte, mais plus la même bouche : un tiret ajouté ne change pas le texte
+    # prononcé, il change qui le dit. Les manifestes d'avant la distribution n'ont
+    # pas de rôle ; ils sont jugés sur le texte seul.
+    if all("role" in e for e in timing):
+        return [str(e["role"]) for e in timing] == [
+            str(r.get("role", "narrateur")) for r in records
+        ]
+    return True
 
 
 def server_errors() -> tuple[type[Exception], ...]:
@@ -125,7 +141,37 @@ def server_errors() -> tuple[type[Exception], ...]:
     return (OmnivoiceError, Zonos2Error, VoxtralError)
 
 
-def synthesize_with_recovery(engine, segments, profile, check_cancel, reuse, backend, job, queue):
+def casting(engine, project: Project, paths: list[Path], job: Job, queue: Queue) -> dict:
+    """La voix des dialogues, si le projet en a une : moteur jumeau et débit calibré.
+
+    Les répliques de tout le livre servent à la calibration — le premier chapitre peut
+    n'en contenir aucune. Un livre sans réplique repérée le dit, plutôt que de laisser
+    croire que la voix choisie a servi.
+    """
+    from .tts.synth import build_cast, load_segments
+
+    if not project.dialogue_voice:
+        return {}
+    lines = [s for path in paths for s in load_segments(path) if s.role == DIALOGUE]
+    if not lines:
+        queue.report(
+            job.id, message="aucune réplique repérée : la voix des dialogues ne servira pas"
+        )
+    cast = build_cast(engine, project.dialogue_voice, lines, project.calibration_file)
+    second, profile = cast[DIALOGUE]
+    # Le nom résolu par le moteur, pas celui saisi : c'est lui qui note les pistes.
+    project.dialogue_voice = second.voice
+    queue.report(
+        job.id,
+        message=f"dialogues par {second.voice} ({len(lines)} répliques), "
+        f"débit calibré à {profile.chars_per_second} car/s",
+    )
+    return cast
+
+
+def synthesize_with_recovery(
+    engine, segments, profile, check_cancel, reuse, backend, job, queue, cast=None
+):
     """Un chapitre, avec une seconde chance si le serveur disparaît en route.
 
     Vécu : un serveur OmniVoice parti sans un mot au milieu du chapitre six, et toute la
@@ -137,7 +183,7 @@ def synthesize_with_recovery(engine, segments, profile, check_cancel, reuse, bac
     for attempt in (1, 2):
         try:
             return synthesize_chapter(
-                engine, segments, profile, on_segment=check_cancel, reuse=reuse
+                engine, segments, profile, on_segment=check_cancel, reuse=reuse, cast=cast
             )
         except server_errors() as error:
             if attempt == 2 or CONCIERGE is None or not CONCIERGE.active:
@@ -183,19 +229,29 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
     # Le réglage précédent est relevé avant d'appliquer le nouveau : c'est leur écart qui
     # décide s'il faut tout refaire. La vitesse compte au même titre que la voix — un
     # livre dont la moitié des chapitres accélère serait pire qu'un livre trop rapide.
-    previous = f"{project.backend}/{project.voice}@{project.speed:.2f}"
+    previous = project.signature
     if (wanted := job.params.get("speed")) is not None:
         project.speed = float(wanted)
+    # La voix des dialogues n'est touchée que si la tâche en parle : la ligne de commande
+    # n'en parle pas, l'interface toujours — vide, c'est « le narrateur lit tout ».
+    if "dialogue_voice" in job.params:
+        project.dialogue_voice = job.params["dialogue_voice"] or None
 
     queue.report(job.id, 0.0, f"chargement du moteur {backend} à {project.speed:g}×")
     wake(backend, job, queue)
     engine = load(backend, voice, device, project.speed)
     chosen = getattr(engine, "voice", backend)
+    cast = casting(engine, project, paths, job, queue)
 
-    signature = f"{backend}/{chosen}@{project.speed:.2f}"
+    signature = make_signature(backend, chosen, project.speed, project.dialogue_voice)
     changed = project.voice is not None and previous != signature
     if changed:
-        queue.report(job.id, message="réglage différent du précédent : tout est resynthétisé")
+        queue.report(
+            job.id,
+            message="voix changée : seul ce qu'elle disait est resynthétisé"
+            if same_engine(previous, signature)
+            else "réglage différent du précédent : tout est resynthétisé",
+        )
         # Les pistes d'avant la note portent la voix d'avant : on l'écrit sur elles
         # maintenant, tant qu'on la connaît. Une synthèse interrompue les laisserait
         # sinon passer pour à jour à la relance, le projet ayant déjà retenu la nouvelle.
@@ -232,11 +288,14 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
             queue.report(job.id, (index + 1) / len(paths), f"{path.stem} déjà synthétisé")
             continue
         reuse = None
-        same_voice = read_stamp(target) == signature if read_stamp(target) else not changed
-        if target.exists() and not force and same_voice:
-            # Même voix, même débit : ce qui n'a pas changé de texte est repris tel quel.
+        # Une piste sans note date d'avant les notes : elle porte le réglage du projet.
+        stamped = read_stamp(target) or ("" if changed else signature)
+        if target.exists() and not force and same_engine(stamped, signature):
+            # Même moteur, même débit : ce qui n'a pas changé de texte ni de voix est
+            # repris tel quel — la voix de chaque prise est celle notée au manifeste,
+            # ou, pour un manifeste d'avant la distribution, le narrateur d'alors.
             number = int(path.stem.removeprefix("ch"))
-            reuse = previous_takes(target, project.timing(number))
+            reuse = previous_takes(target, project.timing(number), parse_signature(stamped)[1])
             queue.report(job.id, message=f"{path.stem} : la piste ne dit plus le texte")
         segments = load_segments(path)
         queue.report(
@@ -245,7 +304,7 @@ def run_synth(project: Project, job: Job, queue: Queue) -> None:
             f"{path.stem} — {segments[0].title} ({len(segments)} segments)",
         )
         result = synthesize_with_recovery(
-            engine, segments, profile, check_cancel, reuse, backend, job, queue
+            engine, segments, profile, check_cancel, reuse, backend, job, queue, cast
         )
         result.write(target)
         write_stamp(target, signature)
@@ -438,9 +497,10 @@ def run_resynth(project: Project, job: Job, queue: Queue) -> None:
     wake(project.backend, job, queue)
     engine = load(project.backend, project.voice, device, project.speed)
     profile = profile_for_voice(engine, load_segments(segments_path), project.calibration_file)
+    cast = casting(engine, project, [segments_path], job, queue)
     queue.report(job.id, 0.5, f"ch{number:02d} segment {idx} — « {wanted[0].text[:60]} »")
     # Sans silence d'entrée : ce fragment se recolle dans la piste, il n'en ouvre pas une.
-    result = synthesize_chapter(engine, wanted, profile, lead_in_ms=0)
+    result = synthesize_chapter(engine, wanted, profile, lead_in_ms=0, cast=cast)
 
     audio, _ = sf.read(track, dtype="float32")
     if audio.ndim > 1:
@@ -459,6 +519,8 @@ def run_resynth(project: Project, job: Job, queue: Queue) -> None:
         clean=fresh["clean"],
         cause=fresh.get("cause", ""),
         split=fresh["split"],
+        role=fresh["role"],
+        voice=fresh["voice"],
         approved=False,
     )
     for later in timing[position + 1 :]:

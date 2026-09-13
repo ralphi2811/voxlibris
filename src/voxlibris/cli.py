@@ -273,14 +273,18 @@ def synth(
     root: Path,
     backend: str = typer.Option("xtts", help="xtts, kokoro, piper, voxtral, zonos2 ou omnivoice"),
     voice: str = typer.Option(None, help="voix du moteur ; défaut selon le moteur"),
+    dialogue_voice: str = typer.Option(
+        None, help="voix des répliques, sur le même moteur ; « - » pour revenir au narrateur"
+    ),
     chapters: str = typer.Option(None, help="liste de numéros, par exemple 1,2,3"),
     force: bool = typer.Option(False, help="resynthétiser même si le WAV existe"),
     speed: float = typer.Option(None, help="débit de parole ; 0.9 pour ralentir"),
     device: str = typer.Option("cuda", help="cuda ou cpu"),
 ) -> None:
     """Synthétise les chapitres, avec contrôle qualité et reprise des ratés."""
+    from .project import make_signature
     from .tts.backends import load
-    from .tts.synth import load_segments, profile_for_voice, synthesize_chapter
+    from .tts.synth import build_cast, load_segments, profile_for_voice, synthesize_chapter
 
     project = _open(root)
     paths = sorted(project.segments_dir.glob("ch*.jsonl"))
@@ -290,16 +294,26 @@ def synth(
         wanted = {int(c) for c in chapters.split(",")}
         paths = [p for p in paths if int(p.stem.removeprefix("ch")) in wanted]
 
-    previous = f"{project.backend}/{project.voice}@{project.speed:.2f}"
+    previous = project.signature
     if speed is not None:
         project.speed = speed
+    if dialogue_voice is not None:
+        project.dialogue_voice = None if dialogue_voice == "-" else dialogue_voice
 
     engine = load(backend, voice, device, project.speed)
     chosen = getattr(engine, "voice", backend)
+    cast = build_cast(
+        engine,
+        project.dialogue_voice,
+        [s for path in paths for s in load_segments(path)],
+        project.calibration_file,
+    )
+    if cast:
+        project.dialogue_voice = next(iter(cast.values()))[0].voice
 
     # Un changement de voix ou de vitesse invalide tout : sans cela le livre changerait
     # de narrateur — ou de débit — en cours de route, sans le moindre avertissement.
-    signature = f"{backend}/{chosen}@{project.speed:.2f}"
+    signature = make_signature(backend, chosen, project.speed, project.dialogue_voice)
     changed = project.voice is not None and previous != signature
     if changed:
         console.print("[yellow]Réglage différent du précédent : tout est resynthétisé.[/yellow]")
@@ -308,8 +322,9 @@ def synth(
 
     profile = profile_for_voice(engine, load_segments(paths[0]), project.calibration_file)
     console.print(
-        f"Moteur [bold]{backend}[/bold], voix [bold]{chosen}[/bold], "
-        f"vitesse {project.speed:g}×, débit calibré à {profile.chars_per_second} car/s.\n"
+        f"Moteur [bold]{backend}[/bold], voix [bold]{chosen}[/bold]"
+        + (f", dialogues par [bold]{project.dialogue_voice}[/bold]" if cast else "")
+        + f", vitesse {project.speed:g}×, débit calibré à {profile.chars_per_second} car/s.\n"
     )
 
     warnings: list[str] = []
@@ -320,7 +335,7 @@ def synth(
             continue
         segments = load_segments(path)
         console.print(f"{path.stem} — {segments[0].title} ({len(segments)} segments)")
-        result = synthesize_chapter(engine, segments, profile)
+        result = synthesize_chapter(engine, segments, profile, cast=cast)
         result.write(target)
         console.print(f"  → {target.name}  {result.duration / 60:.1f} min")
         warnings += result.warnings
