@@ -262,3 +262,14 @@ tr.context mark { background: var(--warn-soft); color: var(--ink); padding: 0 3p
 .file-pick input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .file-pick .file-name { overflow: hidden; text-overflow: ellipsis; }
 .file-pick.picked { border-color: var(--accent); }
+
+/* --- Relecture : la distribution, qui lit chaque paragraphe ------------------------- */
+.cast-view { display: flex; flex-direction: column; gap: 12px; }
+.cast-paragraphs { min-height: 60vh; max-height: 75vh; overflow: auto; padding: 8px 0; border-radius: var(--r); border: 1px solid var(--line2); background: var(--bg); }
+.cast-p { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 8px 16px 8px 12px; border-left: 4px solid var(--band, transparent); cursor: pointer; font: 16px/1.65 var(--serif); }
+.cast-p:hover { background: var(--surface2); }
+.cast-p .who { font: 600 11px/1.6 var(--sans); letter-spacing: .02em; color: var(--band, var(--ink2)); padding-top: 4px; text-transform: none; }
+.cast-p.narrateur .who { color: var(--ink2); opacity: .6; }
+.cast-p.dialogue { --band: var(--info); }
+.cast-p.dialogue .who { font-style: italic; }
+.cast-mark { padding: 2px 16px 2px 12px; font: 600 11px/2 var(--mono); color: var(--band, var(--ink2)); border-left: 4px solid var(--band, transparent); opacity: .8; }

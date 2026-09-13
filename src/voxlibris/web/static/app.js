@@ -322,6 +322,61 @@
       assign(name);
     });
     if (clearButton) clearButton.addEventListener("click", function () { assign(""); });
+    // La distribution en clair : qui lit chaque paragraphe, avec les règles de la
+    // préparation — un marqueur « @Nom » vaut jusqu'au suivant, « @ » rend au narrateur,
+    // et sans marqueur un tiret ou des guillemets en tête font une réplique. Calculée
+    // sur le texte de la zone, enregistré ou non : ce qu'on vient d'attribuer s'y voit.
+    var view = document.getElementById("cast-view"), toggle = document.getElementById("cast-view-toggle");
+    var palette = ["#e2ba7a", "#8fc59a", "#e2857a", "#c9a0e0", "#7fd0c8", "#e0a86b"], tints = {};
+    var tint = function (name) {
+      var key = name.toLowerCase();
+      if (!tints[key]) tints[key] = palette[Object.keys(tints).length % palette.length];
+      return tints[key];
+    };
+    var reply = /^\s*(?:[—–-](?=\s|\p{L})|[«“"])/u;
+    var renderCast = function () {
+      var box = document.getElementById("cast-paragraphs"), summary = document.getElementById("cast-summary");
+      box.innerHTML = ""; summary.innerHTML = "";
+      var text = area.value, at = 0, reader = "", counts = {};
+      text.split("\n\n").forEach(function (raw) {
+        var start = at; at += raw.length + 2;
+        var p = raw.trim(); if (!p) return;
+        var mark = /^@\s*(.*)$/.exec(p);
+        if (mark) {
+          reader = mark[1].trim(); if (reader.toLowerCase() === "narrateur") reader = "";
+          var line = document.createElement("div"); line.className = "cast-mark";
+          line.textContent = reader ? "@" + reader + " — lu par " + reader + " à partir d'ici" : "@ — retour au narrateur";
+          if (reader) line.style.setProperty("--band", tint(reader));
+          box.appendChild(line); return;
+        }
+        var who = reader || (reply.test(p) ? "dialogue" : "narrateur");
+        counts[who] = (counts[who] || 0) + 1;
+        var row = document.createElement("div");
+        row.className = "cast-p " + (who === "dialogue" ? "dialogue" : who === "narrateur" ? "narrateur" : "persona");
+        if (reader) row.style.setProperty("--band", tint(reader));
+        var label = document.createElement("span"); label.className = "who";
+        label.textContent = who === "dialogue" ? "réplique" : who === "narrateur" ? "narrateur" : who;
+        var body = document.createElement("div"); body.textContent = p;
+        row.appendChild(label); row.appendChild(body);
+        row.addEventListener("click", function () { showText(); select(start + raw.indexOf(p), p.length); });
+        box.appendChild(row);
+      });
+      Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).forEach(function (who) {
+        var chip = document.createElement("span"); chip.className = "chip " + (who === "narrateur" ? "muted" : who === "dialogue" ? "info" : "accent");
+        chip.textContent = (who === "dialogue" ? "Répliques" : who === "narrateur" ? "Narrateur" : who) + " · " + counts[who];
+        if (who !== "narrateur" && who !== "dialogue") { chip.style.background = "transparent"; chip.style.color = tint(who); chip.style.border = "1px solid " + tint(who); }
+        summary.appendChild(chip);
+      });
+      var unit = document.createElement("span"); unit.className = "muted small"; unit.textContent = "en paragraphes";
+      summary.appendChild(unit);
+    };
+    var showText = function () { if (!view) return; view.hidden = true; area.hidden = false; toggle.setAttribute("aria-pressed", "false"); toggle.classList.remove("primary"); };
+    if (toggle && view) toggle.addEventListener("click", function () {
+      if (!view.hidden) { showText(); area.focus(); return; }
+      renderCast(); area.hidden = true; view.hidden = false;
+      toggle.setAttribute("aria-pressed", "true"); toggle.classList.add("primary");
+    });
+
     // Un bloc proposé par le modèle : retrouvé par ses deux paragraphes extrêmes — la
     // n-ième occurrence de l'ouverture, deux lettres pouvant s'ouvrir pareil —, puis
     // attribué comme une sélection à la main. Rien n'est envoyé : c'est Enregistrer qui

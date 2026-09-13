@@ -814,6 +814,7 @@ class TestDistribution:
         assert 'value="Charles"' in page and 'value="c"' in page
         review = client.get(f"/projects/{name}/review/1").text
         assert 'id="persona-assign"' in review and '<option value="Charles">' in review
+        assert 'id="cast-view-toggle"' in review and 'id="cast-paragraphs"' in review
         # Lancer la synthèse retient la distribution du même formulaire.
         client.post(
             f"/projects/{name}/jobs/synth",
