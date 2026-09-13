@@ -934,22 +934,35 @@ def choose_voice(name: str, backend: str = Form(...), voice: str = Form("")):
     return RedirectResponse(f"/projects/{name}/synth", status_code=303)
 
 
-@app.post("/projects/{name}/cast")
-async def choose_cast(request: Request, name: str):
-    """Retient la distribution : pour chaque persona, sa voix — vide, le narrateur le lit.
+def read_cast(form) -> dict[str, str]:
+    """La distribution telle que le formulaire de synthèse l'envoie : pour chaque
+    persona, sa voix — vide, le narrateur le lit.
 
     Les personas viennent du texte (marqueurs « @Charles ») et de la règle des
-    répliques ; on peut en nommer un nouveau ici avant de lui attribuer des paragraphes
+    répliques ; on peut en nommer un nouveau avant de lui attribuer des paragraphes
     dans la Relecture.
     """
-    project = load_project(name)
-    form = await request.form()
     voices: dict[str, str] = {}
-    for persona, voice in zip(form.getlist("persona"), form.getlist("voice"), strict=False):
+    pairs = zip(form.getlist("persona"), form.getlist("persona_voice"), strict=False)
+    for persona, voice in pairs:
         persona = str(persona).strip().lstrip("@")
         if persona and persona.casefold() != "narrateur":
             voices[persona] = str(voice).strip()
-    project.voices = voices
+    return voices
+
+
+@app.post("/projects/{name}/cast")
+async def choose_cast(request: Request, name: str):
+    """Retient moteur, narrateur et distribution sans rien synthétiser — le même
+    formulaire que la synthèse, l'autre bouton."""
+    project = load_project(name)
+    form = await request.form()
+    if backend := str(form.get("backend") or ""):
+        if backend not in BACKENDS:
+            raise HTTPException(400, "Moteur inconnu")
+        project.backend = backend
+        project.voice = str(form.get("voice") or "").strip() or None
+    project.voices = read_cast(form)
     project.save()
     return RedirectResponse(f"/projects/{name}/synth", status_code=303)
 
@@ -1062,6 +1075,10 @@ async def enqueue_job(request: Request, name: str, kind: str):
     form = await request.form()
     params: dict = {}
     if kind == "synth":
+        # La distribution part avec la tâche : retenue sur le projet, que le moteur
+        # relira au démarrage, plutôt que promenée dans les paramètres.
+        project.voices = read_cast(form)
+        project.save()
         params = {
             "backend": str(form.get("backend") or project.backend or "xtts"),
             "voice": str(form.get("voice") or "") or None,

@@ -801,15 +801,25 @@ class TestDistribution:
         client.post(
             f"/projects/{name}/cast",
             data={
+                "backend": "kokoro",
+                "voice": "ff_siwis",
                 "persona": ["dialogue", "@Charles", "narrateur", ""],
-                "voice": [" b ", "c", "d", "e"],
+                "persona_voice": [" b ", "c", "d", "e"],
             },
         )
-        assert app_module.load_project(name).voices == {"dialogue": "b", "Charles": "c"}
+        project = app_module.load_project(name)
+        assert project.voices == {"dialogue": "b", "Charles": "c"}
+        assert (project.backend, project.voice) == ("kokoro", "ff_siwis")
         page = client.get(f"/projects/{name}/synth").text
         assert 'value="Charles"' in page and 'value="c"' in page
         review = client.get(f"/projects/{name}/review/1").text
         assert 'id="persona-assign"' in review and '<option value="Charles">' in review
+        # Lancer la synthèse retient la distribution du même formulaire.
+        client.post(
+            f"/projects/{name}/jobs/synth",
+            data={"backend": "kokoro", "persona": ["Charles"], "persona_voice": ["z"]},
+        )
+        assert app_module.load_project(name).voices == {"Charles": "z"}
 
     def test_changer_de_moteur_oublie_la_voix_des_dialogues(self, client, make_epub):
         from voxlibris.web import app as app_module

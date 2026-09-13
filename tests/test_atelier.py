@@ -564,6 +564,10 @@ class TestDistribution:
         log = queue.get(job.id).log
         assert "charles par autre (2 segments)" in log
         assert "Inconnu : aucun paragraphe attribué, sa voix ne servira pas" in log
+        # Le projet juge la piste comme la synthèse l'a notée : ni la casse du nom, ni
+        # une voix qui n'a pas servi ne la font passer pour périmée.
+        assert project.signature == read_stamp(project.wav_dir / "ch01.wav")
+        assert project.track_matches(1)
 
     def test_un_persona_sans_voix_ne_change_rien(self, tmp_path, monkeypatch):
         """Un persona nommé sans voix : le narrateur lit tout, la note ne le mentionne pas."""
@@ -589,11 +593,11 @@ class TestSignature:
             "xtts", "Viktor Menelaos", 0.95, {"Charles": "Damien", "dialogue": "Ana", "x": ""}
         )
         assert alone == "xtts/Viktor Menelaos@0.95"
-        assert both == "xtts/Viktor Menelaos+Charles=Damien+dialogue=Ana@0.95"
+        assert both == "xtts/Viktor Menelaos+charles=Damien+dialogue=Ana@0.95"
         assert parse_signature(both) == (
             "xtts",
             "Viktor Menelaos",
-            {"Charles": "Damien", "dialogue": "Ana"},
+            {"charles": "Damien", "dialogue": "Ana"},
             "0.95",
         )
         assert parse_signature(alone) == ("xtts", "Viktor Menelaos", {}, "0.95")

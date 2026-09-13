@@ -57,12 +57,14 @@ def make_signature(
 ) -> str:
     """Moteur, voix et débit — ce qui fait qu'une piste sonne comme les autres.
 
-    La distribution s'ajoute au narrateur, persona par persona : « +dialogue=Ana
-    +Charles=Damien ». Une piste faite avant qu'on la choisisse n'a donc pas la même
-    note, et sera refaite pour ce que ces voix disent.
+    La distribution s'ajoute au narrateur, persona par persona : « +charles=Damien
+    +dialogue=Ana ». Une piste faite avant qu'on la choisisse n'a donc pas la même
+    note, et sera refaite pour ce que ces voix disent. Les noms de rôle sont écrits en
+    minuscules — un marqueur « @charles » et une ligne « Charles » de la distribution
+    désignent le même persona, et la note doit le dire d'une seule façon.
     """
     others = "".join(
-        f"+{role}={chosen}"
+        f"+{role.casefold()}={chosen}"
         for role, chosen in sorted((voices or {}).items(), key=lambda kv: kv[0].casefold())
         if chosen and role.casefold() != "narrateur"
     )
@@ -382,8 +384,22 @@ class Project:
 
     @property
     def signature(self) -> str:
-        """Moteur, voix et débit : ce qui fait qu'une piste sonne comme les autres."""
-        return make_signature(self.backend, self.voice, self.speed, self.voices)
+        """Moteur, voix et débit : ce qui fait qu'une piste sonne comme les autres.
+
+        Seules les voix qui servent y figurent — celles d'un rôle que les segments
+        portent —, comme sur la note que la synthèse écrit ; sans quoi un persona nommé
+        d'avance, sans un paragraphe, ferait passer toutes les pistes pour périmées.
+        """
+        return make_signature(self.backend, self.voice, self.speed, self.effective_voices())
+
+    def effective_voices(self) -> dict[str, str]:
+        """La distribution restreinte aux rôles que les segments préparés portent."""
+        present = {role.casefold() for role in self.roles()}
+        return {
+            role: voice
+            for role, voice in self.voices.items()
+            if voice and role.casefold() in present
+        }
 
     def roles(self) -> Counter[str]:
         """Combien de segments chaque rôle a dans les segments préparés."""

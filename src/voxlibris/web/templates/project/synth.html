@@ -107,23 +107,6 @@
   </section>
 
   <aside class="stack">
-    <form class="card pad stack" method="post" action="/projects/{{ name }}/cast" id="cast-form">
-      <strong>Distribution</strong>
-      <span class="muted small">Le narrateur lit tout, sauf ce que vous confiez à d'autres voix du même moteur. Les répliques sont les paragraphes ouvrant sur un tiret ou des guillemets ; un persona lit les paragraphes que la Relecture lui attribue. Vide : le narrateur.</span>
-      {% for persona in ["dialogue"] + personas %}
-      <div class="row">
-        <input type="hidden" name="persona" value="{{ persona }}">
-        <span class="grow">{% if persona == "dialogue" %}Répliques{% else %}{{ persona }}{% endif %} <span class="muted small">{{ roles.get(persona, 0) }} seg.</span></span>
-        <input class="input" type="text" name="voice" list="synth-voices" value="{{ project.voices.get(persona, '') }}" placeholder="narrateur" style="max-width: 55%">
-      </div>
-      {% endfor %}
-      <div class="row">
-        <input class="input grow" type="text" name="persona" placeholder="nouveau persona, ex. Charles" maxlength="40">
-        <input class="input" type="text" name="voice" list="synth-voices" placeholder="sa voix" style="max-width: 45%">
-      </div>
-      <button class="btn" type="submit">Retenir la distribution</button>
-    </form>
-
     <form class="card pad stack" method="post" action="/projects/{{ name }}/jobs/synth" id="synth-form">
       <strong>Réglages de synthèse</strong>
       <div class="field"><span>Moteur</span>
@@ -133,9 +116,24 @@
           {% endfor %}
         </div>
       </div>
-      <div class="field"><span>Voix</span>
-        <input class="input" type="text" name="voice" id="synth-voice" list="synth-voices" value="{{ project.voice or '' }}" placeholder="voix par défaut du moteur">
+      <div class="field" id="cast"><span>Voix</span>
         <datalist id="synth-voices"></datalist>
+        <div class="row">
+          <span class="grow">Narrateur <span class="muted small">{{ roles.get("narrateur", 0) }} seg.</span></span>
+          <input class="input" type="text" name="voice" id="synth-voice" list="synth-voices" value="{{ project.voice or '' }}" placeholder="voix par défaut du moteur" style="max-width: 58%">
+        </div>
+        {% for persona in ["dialogue"] + personas %}
+        <div class="row">
+          <input type="hidden" name="persona" value="{{ persona }}">
+          <span class="grow">{% if persona == "dialogue" %}Répliques{% else %}{{ persona }}{% endif %} <span class="muted small">{{ roles.get(persona, 0) }} seg.</span></span>
+          <input class="input" type="text" name="persona_voice" list="synth-voices" value="{{ project.voices.get(persona, '') }}" placeholder="le narrateur" style="max-width: 58%">
+        </div>
+        {% endfor %}
+        <div class="row">
+          <input class="input grow" type="text" name="persona" placeholder="nouveau persona" maxlength="40">
+          <input class="input" type="text" name="persona_voice" list="synth-voices" placeholder="sa voix" style="max-width: 58%">
+        </div>
+        <span class="muted small">Toutes du même moteur. Les répliques sont les paragraphes ouvrant sur un tiret ou des guillemets ; un persona lit les paragraphes que la Relecture lui attribue. Vide : le narrateur.</span>
         <a class="muted small" href="/projects/{{ name }}/voices">{{ icons.ic("ear", 12) }} Comparer des voix</a>
       </div>
       <div class="field">
@@ -148,6 +146,7 @@
       </div>
       <label class="toggle-row"><input type="checkbox" name="force"><span class="toggle"></span><span>Tout resynthétiser, même l'inchangé</span></label>
       <button class="btn primary" type="submit" {% if job or not status["segments"] %}disabled{% endif %}>{{ icons.ic("play") }}{% if current %}Relancer la synthèse{% else %}Lancer la synthèse{% endif %}</button>
+      <button class="btn ghost" type="submit" formaction="/projects/{{ name }}/cast" formnovalidate title="Retient moteur et distribution, sans rien synthétiser">Retenir sans synthétiser</button>
       {% if not status["segments"] %}<span class="muted small">Préparez les segments d'abord.</span>{% endif %}
     </form>
 
