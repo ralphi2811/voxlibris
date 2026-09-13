@@ -322,6 +322,27 @@
       assign(name);
     });
     if (clearButton) clearButton.addEventListener("click", function () { assign(""); });
+    // Un bloc proposé par le modèle : retrouvé par ses deux paragraphes extrêmes — la
+    // n-ième occurrence de l'ouverture, deux lettres pouvant s'ouvrir pareil —, puis
+    // attribué comme une sélection à la main. Rien n'est envoyé : c'est Enregistrer qui
+    // décide, comme pour le reste.
+    document.querySelectorAll(".assign-block").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var start = -1, from = 0;
+        for (var k = 0; k <= Number(b.dataset.nth || 0); k++) {
+          start = area.value.indexOf(b.dataset.opening, from);
+          if (start < 0) break;
+          from = start + 1;
+        }
+        var end = start < 0 ? -1 : area.value.indexOf(b.dataset.closing, start);
+        if (start < 0 || end < 0) { b.disabled = true; b.title = "ce passage n'est plus dans le texte"; return; }
+        area.setSelectionRange(start, end + b.dataset.closing.length);
+        assign(b.dataset.persona);
+        var card = b.closest(".proposal");
+        if (card) card.classList.add("applied");
+        b.disabled = true;
+      });
+    });
 
     // Rechercher et remplacer, dans la zone de saisie seulement.
     var find = document.getElementById("find"), replace = document.getElementById("replace");

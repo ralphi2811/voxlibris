@@ -5,6 +5,7 @@
 {% if suspects %}<span class="chip warn">{{ suspects|length }} forme{{ "s" if suspects|length != 1 }} à vérifier</span>{% else %}<span class="chip ok">{{ icons.ic("check", 12) }}rien à signaler</span>{% endif %}
 {% if llm_enabled and not job %}
 <form method="post" action="/projects/{{ name }}/jobs/proofread"><button class="btn ghost" type="submit" title="{{ llm_model or 'modèle configuré dans Réglages' }}">{{ icons.ic("sparkle") }}Relire avec le modèle</button></form>
+<form method="post" action="/projects/{{ name }}/jobs/personas"><button class="btn ghost" type="submit" title="Le modèle lit tout le livre et propose les lettres, journaux et récits enchâssés à confier à un persona">{{ icons.ic("sparkle") }}Repérer les personas</button></form>
 {% endif %}
 <button class="btn primary" type="submit" form="review-form">{{ icons.ic("check") }}Enregistrer</button>
 {% endblock %}
@@ -67,15 +68,32 @@
     <div class="card-head">
       <strong>Propositions</strong>
       {% if suggestions %}<span class="chip info">{{ suggestions|length }} du modèle</span>{% endif %}
+      {% if blocks %}<span class="chip info">{{ blocks|length }} bloc{{ "s" if blocks|length != 1 }}</span>{% endif %}
       <span class="spacer"></span>
       <span class="chip muted" id="suspect-count">{{ suspects|length }}</span>
     </div>
     <div class="chips filter-bar" id="reason-filter">
       <button type="button" class="chip accent on" data-reason="">Toutes</button>
       {% if suggestions %}<button type="button" class="chip muted" data-reason="modèle">modèle</button>{% endif %}
+      {% if blocks %}<button type="button" class="chip muted" data-reason="persona">personas</button>{% endif %}
       {% for r in reasons %}<button type="button" class="chip muted" data-reason="{{ r }}">{{ r }}</button>{% endfor %}
     </div>
     <div class="proposal-list">
+      {% for b, nth in blocks %}
+      <div class="proposal" data-reason="persona">
+        <div class="row">
+          <span class="strong">{{ b.persona }}</span>
+          <span class="spacer"></span><span class="chip muted">paragraphes {{ b.first + 1 }}–{{ b.last + 1 }}</span>
+        </div>
+        <div class="serif muted small ctx">« {{ b.opening|truncate(70) }} » … « {{ b.closing|truncate(70) }} »</div>
+        <div class="row">
+          <span class="muted tiny">le modèle propose de le confier à ce persona</span>
+          <span class="spacer"></span>
+          <button type="button" class="btn sm primary assign-block" data-persona="{{ b.persona }}" data-opening="{{ b.opening }}" data-closing="{{ b.closing }}" data-nth="{{ nth }}">{{ icons.ic("check", 12) }}Attribuer</button>
+          <button type="button" class="btn sm ghost dismiss">Ignorer</button>
+        </div>
+      </div>
+      {% endfor %}
       {% for s in suggestions %}
       <div class="proposal" data-reason="modèle">
         <div class="row">
@@ -100,7 +118,7 @@
         <div class="serif muted small ctx">…{{ s.context }}…</div>
       </div>
       {% endfor %}
-      {% if not suspects and not suggestions %}<p class="muted pad">Rien à signaler dans ce chapitre.</p>{% endif %}
+      {% if not suspects and not suggestions and not blocks %}<p class="muted pad">Rien à signaler dans ce chapitre.</p>{% endif %}
     </div>
     {% if suggestions %}
     <div class="row pad-sm">

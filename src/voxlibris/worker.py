@@ -432,6 +432,35 @@ def run_proofread(project: Project, job: Job, queue: Queue) -> None:
     )
 
 
+def run_personas(project: Project, job: Job, queue: Queue) -> None:
+    """Demande au modèle qui parle d'un seul tenant dans le livre : lettres, journal…
+
+    Le résultat est déposé sur disque, et rien d'autre : la Relecture présente les blocs
+    à attribuer, un par un, et c'est le geste humain qui pose les marqueurs.
+    """
+    from .personas import discover
+
+    texts = project.chapter_texts()
+    queue.report(job.id, 0.05, f"{len(texts)} chapitre(s) à lire")
+    report = discover(
+        texts,
+        known=project.personas(),
+        on_chapter=lambda chapter, i, n: queue.report(job.id, 0.05 + 0.9 * i / n, chapter),
+    )
+    project.personas_file.parent.mkdir(parents=True, exist_ok=True)
+    project.personas_file.write_text(report.to_json(), encoding="utf-8")
+
+    if report.error:
+        raise RuntimeError(report.error)
+    names = ", ".join(p.name for p in report.personas) or "aucun nouveau"
+    queue.report(
+        job.id,
+        1.0,
+        f"personas : {names} ; {len(report.blocks)} bloc(s) à attribuer dans la Relecture, "
+        f"{len(report.rejected)} écarté(s) par les garde-fous. Rien n'a été modifié.",
+    )
+
+
 def run_sample(project: Project, job: Job, queue: Queue) -> None:
     """Synthétise un même extrait avec plusieurs voix, pour choisir à l'oreille."""
     from .tts.backends import load
@@ -571,6 +600,7 @@ def run_assemble(project: Project, job: Job, queue: Queue) -> None:
 HANDLERS = {
     "normalize": run_normalize,
     "proofread": run_proofread,
+    "personas": run_personas,
     "synth": run_synth,
     "sample": run_sample,
     "resynth": run_resynth,

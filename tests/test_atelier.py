@@ -607,3 +607,32 @@ class TestSignature:
         assert not same_engine(alone, make_signature("xtts", "Viktor Menelaos", 1.0))
         assert not same_engine(alone, make_signature("kokoro", "Viktor Menelaos", 0.95))
         assert not same_engine("", alone)
+
+
+class TestPersonas:
+    def test_la_tache_depose_le_rapport_sans_toucher_au_texte(self, tmp_path, monkeypatch):
+        from voxlibris import worker
+        from voxlibris.personas import Block, Persona, Report
+
+        project = make_project(tmp_path / "p")
+        before = (project.raw_dir / "ch01.md").read_text(encoding="utf-8")
+        report = Report(
+            personas=[Persona("Charles", "le frère")],
+            blocks=[Block("ch01.md", "Charles", 0, 0, "Il faisait beau.", "Il faisait beau.")],
+            chapters=2,
+        )
+        asked: dict = {}
+
+        def fake_discover(texts, known=(), on_chapter=None, **_):
+            asked.update(texts=list(texts), known=list(known))
+            return report
+
+        monkeypatch.setattr("voxlibris.personas.discover", fake_discover)
+        queue = Queue(tmp_path / "jobs.sqlite")
+        job = queue.enqueue("p", "personas")
+        worker.run_personas(project, job, queue)
+
+        assert asked["texts"] == ["ch01.md", "ch02.md"]
+        assert (project.raw_dir / "ch01.md").read_text(encoding="utf-8") == before
+        assert project.discovered_personas() == ["Charles"]
+        assert "1 bloc(s) à attribuer" in queue.get(job.id).log

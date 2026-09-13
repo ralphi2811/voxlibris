@@ -821,6 +821,34 @@ class TestDistribution:
         )
         assert app_module.load_project(name).voices == {"Charles": "z"}
 
+    def test_les_blocs_du_modele_sont_proposes_dans_la_relecture(self, client, make_epub):
+        from voxlibris.personas import Block, Persona, Report
+        from voxlibris.web import app as app_module
+
+        name, project = self.make(client, make_epub)
+        text = project.chapter_texts()["ch01.md"]
+        first = text.split("\n\n")[0].strip()
+        project.personas_file.parent.mkdir(parents=True, exist_ok=True)
+        project.personas_file.write_text(
+            Report(
+                personas=[Persona("Charles", "le frère")],
+                blocks=[
+                    Block("ch01.md", "Charles", 0, 0, first, first),
+                    Block("ch01.md", "Charles", 3, 3, "Disparu du texte.", "Disparu du texte."),
+                ],
+                chapters=1,
+            ).to_json(),
+            encoding="utf-8",
+        )
+        page = client.get(f"/projects/{name}/review/1").text
+        assert page.count('class="btn sm primary assign-block"') == 1
+        assert 'data-persona="Charles"' in page and 'data-nth="0"' in page
+        assert "Repérer les personas" in page
+        # Le persona repéré attend déjà sa voix dans la tuile de synthèse.
+        assert "Charles" in app_module.load_project(name).personas()
+        synth = client.get(f"/projects/{name}/synth").text
+        assert 'value="Charles"' in synth
+
     def test_changer_de_moteur_oublie_la_voix_des_dialogues(self, client, make_epub):
         from voxlibris.web import app as app_module
 

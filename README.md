@@ -175,6 +175,14 @@ du moteur, une voix clonée comprise :
 Un champ vide rend au narrateur. Changer une voix ne refait que ce qu'elle disait : le
 manifeste de chaque piste note qui a dit chaque segment, le reste est repris tel quel.
 
+Le modèle de langage peut faire le repérage : **Repérer les personas**, dans la
+Relecture, lui fait lire le livre chapitre par chapitre et proposer les lettres,
+journaux et récits enchâssés avec leur auteur. Chaque bloc arrive en proposition, avec
+Attribuer et Ignorer ; rien n'est écrit sans ce geste, et les garde-fous écartent
+d'office un bloc dont les bornes n'existent pas ou qui en chevauche un autre. Le texte
+entier part au modèle — local par défaut, voir [Assistance par modèle de
+langage](#assistance-par-modèle-de-langage).
+
 ### Cloner une voix : OmniVoice et ZONOS2
 
 Un extrait de quinze à trente secondes, déposé depuis la page Voix, devient une voix pour

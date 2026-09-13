@@ -151,6 +151,11 @@ class Project:
         return self.root / "work" / "suggestions.json"
 
     @property
+    def personas_file(self) -> Path:
+        """Personas et blocs repérés par le modèle, en attente du même arbitrage."""
+        return self.root / "work" / "personas.json"
+
+    @property
     def config_file(self) -> Path:
         return self.root / "project.json"
 
@@ -410,11 +415,22 @@ class Project:
                     counts[str(json.loads(line).get("role", "narrateur"))] += 1
         return counts
 
+    def discovered_personas(self) -> list[str]:
+        """Les personas que le modèle a repérés, s'il a été sollicité."""
+        if not self.personas_file.exists():
+            return []
+        try:
+            data = json.loads(self.personas_file.read_text(encoding="utf-8"))
+            return [str(p["name"]) for p in data.get("personas", []) if p.get("name")]
+        except (ValueError, TypeError, KeyError):
+            return []
+
     def personas(self) -> list[str]:
         """Les personas du livre, hors narrateur et dialogues : ceux que le texte nomme,
-        et ceux qu'une voix attend. Un même nom écrit à deux casses ne compte qu'une fois."""
+        ceux qu'une voix attend, ceux que le modèle a repérés. Un même nom écrit à deux
+        casses ne compte qu'une fois."""
         seen: dict[str, str] = {}
-        for name in [*self.voices, *self.roles()]:
+        for name in [*self.voices, *self.roles(), *self.discovered_personas()]:
             if name.casefold() not in ("narrateur", "dialogue"):
                 seen.setdefault(name.casefold(), name)
         return sorted(seen.values(), key=str.casefold)

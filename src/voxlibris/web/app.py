@@ -118,6 +118,7 @@ PER_BACKEND = 4
 LANDING = {
     "normalize": "prepare",
     "proofread": "review/1",
+    "personas": "review/1",
     "sample": "voices",
     "synth": "synth",
     "resynth": "synth",
@@ -685,6 +686,21 @@ async def edit_chapter(request: Request, name: str, number: int, action: str):
 
 
 # --- Relecture ----------------------------------------------------------------------
+def load_blocks(project: Project, chapter: str, text: str) -> list:
+    """Les blocs que le modèle propose d'attribuer dans ce chapitre, et qui ne le sont
+    pas encore. Un rapport illisible vaut une page sans propositions, pas une erreur."""
+    from ..personas import Report, pending
+
+    path = project.personas_file
+    if not path.exists():
+        return []
+    try:
+        report = Report.from_json(path.read_text(encoding="utf-8"))
+    except (ValueError, TypeError):
+        return []
+    return pending([b for b in report.blocks if b.chapter == chapter], text)
+
+
 def load_suggestions(project: Project) -> list:
     """Propositions du modèle, si une passe a été lancée.
 
@@ -738,6 +754,7 @@ def review_chapter(request: Request, name: str, number: int, find: str = ""):
         reasons=reasons,
         personas=project.personas(),
         suggestions=[s for s in load_suggestions(project) if s.chapter == path.name],
+        blocks=load_blocks(project, path.name, chapter.text),
         numbers=numbers,
         titles=titles,
         previous=max([n for n in numbers if n < number], default=None),
@@ -1105,7 +1122,7 @@ async def enqueue_job(request: Request, name: str, kind: str):
         }
     elif kind == "assemble":
         params = {"skip_mp3": not form.get("mp3")}
-    elif kind != "proofread":
+    elif kind not in ("proofread", "personas"):
         raise HTTPException(404, "Tâche inconnue")
 
     queue.enqueue(name, kind, **params)
