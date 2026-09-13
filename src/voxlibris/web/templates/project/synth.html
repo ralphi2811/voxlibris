@@ -117,21 +117,22 @@
         </div>
       </div>
       <div class="field" id="cast"><span>Voix</span>
-        <datalist id="synth-voices"></datalist>
+        {# Une vraie liste, remplie d'après le moteur : une saisie libre à suggestions ne
+           montre que ce qui contient le texte déjà saisi, et cache une voix ajoutée. #}
         <div class="row">
           <span class="grow">Narrateur <span class="muted small">{{ roles.get("narrateur", 0) }} seg.</span></span>
-          <input class="input" type="text" name="voice" id="synth-voice" list="synth-voices" value="{{ project.voice or '' }}" placeholder="voix par défaut du moteur" style="max-width: 58%">
+          <select class="input voice-pick" name="voice" id="synth-voice" data-value="{{ project.voice or '' }}" data-placeholder="voix par défaut du moteur" style="max-width: 58%"><option value="{{ project.voice or '' }}" selected>{{ project.voice or "voix par défaut du moteur" }}</option></select>
         </div>
         {% for persona in ["dialogue"] + personas %}
         <div class="row">
           <input type="hidden" name="persona" value="{{ persona }}">
           <span class="grow">{% if persona == "dialogue" %}Répliques{% else %}{{ persona }}{% endif %} <span class="muted small">{{ roles.get(persona, 0) }} seg.</span></span>
-          <input class="input" type="text" name="persona_voice" list="synth-voices" value="{{ project.voices.get(persona, '') }}" placeholder="le narrateur" style="max-width: 58%">
+          <select class="input voice-pick" name="persona_voice" data-value="{{ project.voices.get(persona, '') }}" data-placeholder="le narrateur" style="max-width: 58%"><option value="{{ project.voices.get(persona, '') }}" selected>{{ project.voices.get(persona, '') or "le narrateur" }}</option></select>
         </div>
         {% endfor %}
         <div class="row">
           <input class="input grow" type="text" name="persona" placeholder="nouveau persona" maxlength="40">
-          <input class="input" type="text" name="persona_voice" list="synth-voices" placeholder="sa voix" style="max-width: 58%">
+          <select class="input voice-pick" name="persona_voice" data-value="" data-placeholder="sa voix" style="max-width: 58%"><option value="" selected>sa voix</option></select>
         </div>
         <span class="muted small">Toutes du même moteur. Les répliques sont les paragraphes ouvrant sur un tiret ou des guillemets ; un persona lit les paragraphes que la Relecture lui attribue. Vide : le narrateur.</span>
         <a class="muted small" href="/projects/{{ name }}/voices">{{ icons.ic("ear", 12) }} Comparer des voix</a>

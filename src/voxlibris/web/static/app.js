@@ -134,9 +134,32 @@
     select.addEventListener("change", fill);
     fill();
   }
+  // Les listes de voix de la synthèse — narrateur et personas — suivent le moteur :
+  // une vraie liste déroulante, où l'on voit tout le catalogue, la voix en place
+  // restant proposée même si le moteur ne la connaît plus, et « Autre nom… » ouvrant
+  // la saisie libre pour ce qu'un catalogue ignore.
+  var OTHER = "\u0000autre";
+  function fillVoicePick(select, voices) {
+    var current = select.dataset.value || "", placeholder = select.dataset.placeholder || "";
+    select.innerHTML = "";
+    var add = function (value, label) { var o = document.createElement("option"); o.value = value; o.textContent = label; select.appendChild(o); return o; };
+    add("", placeholder);
+    var seen = {};
+    voices.forEach(function (v) { seen[v] = true; add(v, v); });
+    if (current && !seen[current]) add(current, current + " (hors catalogue)");
+    add(OTHER, "Autre nom…");
+    select.value = current;
+    select.onchange = function () {
+      if (select.value !== OTHER) { select.dataset.value = select.value; return; }
+      // La saisie libre prend la place de la liste, même nom, même formulaire.
+      var input = document.createElement("input");
+      input.type = "text"; input.name = select.name; input.className = "input"; input.style.cssText = select.style.cssText;
+      input.placeholder = "nom de la voix"; input.id = select.id;
+      select.parentNode.replaceChild(input, select); input.focus();
+    };
+  }
   function enginePicker(box) {
-    var radios = box.querySelectorAll("input[type=radio]"), list = document.getElementById("synth-voices"),
-        hint = document.getElementById("speed-hint");
+    var radios = box.querySelectorAll("input[type=radio]"), hint = document.getElementById("speed-hint");
     // Les moteurs sans réglage de débit : dits par le serveur, car Voxtral en a un
     // quand il est servi en local et pas par l'API.
     var noSpeed = {};
@@ -147,10 +170,8 @@
       if (hint) hint.textContent = noSpeed[chosen.value]
         ? "Ce moteur ne module pas le débit : la vitesse est sans effet."
         : "Changer la vitesse refait tout le livre, pour un débit constant.";
-      if (!list) return;
       fetch("/api/voices/" + chosen.value).then(function (r) { return r.json(); }).then(function (data) {
-        list.innerHTML = "";
-        (data.voices || []).forEach(function (v) { var o = document.createElement("option"); o.value = v; list.appendChild(o); });
+        document.querySelectorAll("select.voice-pick").forEach(function (s) { fillVoicePick(s, data.voices || []); });
       }).catch(function () {});
     };
     radios.forEach(function (r) { r.addEventListener("change", fill); });
