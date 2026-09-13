@@ -762,7 +762,11 @@ class TestDistribution:
         path = make_epub(["Le départ"])
         with path.open("rb") as handle:
             client.post("/projects", files={"file": (path.name, handle)})
-        name = next(iter(app_module.workspace().iterdir())).name
+        # Le projet est le dossier qui porte un project.json — l'espace de travail
+        # contient aussi _uploads, et l'ordre des dossiers dépend du système.
+        name = next(
+            d.name for d in app_module.workspace().iterdir() if (d / "project.json").exists()
+        )
         project = app_module.load_project(name)
         project.segments_dir.mkdir(parents=True, exist_ok=True)
         (project.segments_dir / "ch01.jsonl").write_text(
