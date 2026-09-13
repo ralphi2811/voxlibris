@@ -842,6 +842,7 @@ class TestDistribution:
             encoding="utf-8",
         )
         page = client.get(f"/projects/{name}/review/1").text
+        assert "Repérage des personas" in page and "le frère" in page
         assert page.count('class="btn sm primary assign-block"') == 1
         assert 'data-persona="Charles"' in page and 'data-nth="0"' in page
         assert "Repérer les personas" in page

@@ -86,6 +86,17 @@
       {% for r in reasons %}<button type="button" class="chip muted" data-reason="{{ r }}">{{ r }}</button>{% endfor %}
     </div>
     <div class="proposal-list">
+      {% if persona_report %}
+      <div class="proposal" data-reason="persona">
+        <div class="row"><span class="strong">Repérage des personas</span><span class="spacer"></span><span class="chip muted">{{ persona_report.chapters }} chapitre{{ "s" if persona_report.chapters != 1 }} lu{{ "s" if persona_report.chapters != 1 }}</span></div>
+        <div class="muted small">
+          {% if persona_report.personas %}Personas vus par le modèle : {% for p in persona_report.personas %}<strong>{{ p.name }}</strong>{% if p.who %} ({{ p.who }}){% endif %}{{ ", " if not loop.last }}{% endfor %}.{% else %}Aucun persona vu par le modèle.{% endif %}
+          {% if blocks %}{{ blocks|length }} bloc{{ "s" if blocks|length != 1 }} à attribuer ci-dessous.{% elif persona_report.done %}{{ persona_report.done }} bloc{{ "s" if persona_report.done != 1 }} dans ce chapitre, déjà attribué{{ "s" if persona_report.done != 1 }} : rien à proposer. La vue Distribution les montre.{% else %}Rien à attribuer dans ce chapitre.{% endif %}
+          {% if persona_report.rejected %}{{ persona_report.rejected }} proposition{{ "s" if persona_report.rejected != 1 }} écartée{{ "s" if persona_report.rejected != 1 }} par les garde-fous.{% endif %}
+          {% if persona_report.error %}<span class="bad">Interrompu : {{ persona_report.error }}</span>{% endif %}
+        </div>
+      </div>
+      {% endif %}
       {% for b, nth in blocks %}
       <div class="proposal" data-reason="persona">
         <div class="row">
@@ -125,7 +136,7 @@
         <div class="serif muted small ctx">…{{ s.context }}…</div>
       </div>
       {% endfor %}
-      {% if not suspects and not suggestions and not blocks %}<p class="muted pad">Rien à signaler dans ce chapitre.</p>{% endif %}
+      {% if not suspects and not suggestions and not blocks and not persona_report %}<p class="muted pad">Rien à signaler dans ce chapitre.</p>{% endif %}
     </div>
     {% if suggestions %}
     <div class="row pad-sm">

@@ -438,7 +438,7 @@ def run_personas(project: Project, job: Job, queue: Queue) -> None:
     Le résultat est déposé sur disque, et rien d'autre : la Relecture présente les blocs
     à attribuer, un par un, et c'est le geste humain qui pose les marqueurs.
     """
-    from .personas import discover
+    from .personas import discover, pending
 
     texts = project.chapter_texts()
     queue.report(job.id, 0.05, f"{len(texts)} chapitre(s) à lire")
@@ -452,11 +452,16 @@ def run_personas(project: Project, job: Job, queue: Queue) -> None:
 
     if report.error:
         raise RuntimeError(report.error)
-    names = ", ".join(p.name for p in report.personas) or "aucun nouveau"
+    names = ", ".join(p.name for p in report.personas) or "aucun"
+    todo = sum(
+        len(pending([b for b in report.blocks if b.chapter == chapter], text))
+        for chapter, text in texts.items()
+    )
     queue.report(
         job.id,
         1.0,
-        f"personas : {names} ; {len(report.blocks)} bloc(s) à attribuer dans la Relecture, "
+        f"personas : {names} ; {todo} bloc(s) à attribuer dans la Relecture, "
+        f"{len(report.blocks) - todo} déjà attribué(s), "
         f"{len(report.rejected)} écarté(s) par les garde-fous. Rien n'a été modifié.",
     )
 

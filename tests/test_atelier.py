@@ -618,7 +618,16 @@ class TestPersonas:
         before = (project.raw_dir / "ch01.md").read_text(encoding="utf-8")
         report = Report(
             personas=[Persona("Charles", "le frère")],
-            blocks=[Block("ch01.md", "Charles", 0, 0, "Il faisait beau.", "Il faisait beau.")],
+            blocks=[
+                Block(
+                    "ch01.md",
+                    "Charles",
+                    0,
+                    0,
+                    "Il faisait beau. Puis il plut.",
+                    "Il faisait beau. Puis il plut.",
+                )
+            ],
             chapters=2,
         )
         asked: dict = {}

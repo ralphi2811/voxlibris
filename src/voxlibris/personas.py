@@ -178,7 +178,6 @@ def discover(
         paragraphs = paragraphs_of(text)
         # Les marqueurs déjà posés ne sont pas des paragraphes à lire.
         readable = [(i, p) for i, p in enumerate(paragraphs) if persona_of(p) is None]
-        current = readers(paragraphs)
         taken: list[tuple[int, int]] = []
         for start, chunk in _slices([p for _, p in readable], SLICE_CHARS):
             numbered = [(readable[start + k][0], p) for k, p in enumerate(chunk)]
@@ -194,8 +193,12 @@ def discover(
                 name = str(entry["nom"]).strip()
                 if _same(name, NARRATOR):
                     continue
-                if not any(_same(name, n) for n in names):
+                # Un persona déjà connu garde son nom ; il figure quand même au rapport,
+                # qui doit dire ce que le modèle a vu, pas seulement ce qu'il découvre.
+                name = next((n for n in names if _same(n, name)), name)
+                if name not in names:
                     names.append(name)
+                if not any(_same(name, p.name) for p in report.personas):
                     report.personas.append(Persona(name, str(entry.get("qui") or "").strip()))
             for entry in answer.get("blocs") or []:
                 if not isinstance(entry, dict):
@@ -218,8 +221,9 @@ def discover(
                         f"{chapter} : {persona} {first}–{last} en chevauche un autre"
                     )
                     continue
-                if all(_same(current[i], persona) for i in range(first, last + 1)):
-                    continue  # déjà attribué dans le texte : rien à proposer
+                # Un bloc déjà attribué dans le texte reste au rapport : la Relecture ne
+                # le propose pas, mais elle peut dire qu'il est fait — un repérage relancé
+                # sur un livre déjà distribué doit rendre compte, pas se taire.
                 taken.append((first, last))
                 report.blocks.append(
                     Block(chapter, persona, first, last, paragraphs[first], paragraphs[last])

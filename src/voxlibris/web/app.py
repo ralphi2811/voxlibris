@@ -686,19 +686,30 @@ async def edit_chapter(request: Request, name: str, number: int, action: str):
 
 
 # --- Relecture ----------------------------------------------------------------------
-def load_blocks(project: Project, chapter: str, text: str) -> list:
+def load_blocks(project: Project, chapter: str, text: str) -> tuple[list, dict | None]:
     """Les blocs que le modèle propose d'attribuer dans ce chapitre, et qui ne le sont
-    pas encore. Un rapport illisible vaut une page sans propositions, pas une erreur."""
+    pas encore, avec un compte rendu du repérage — car « rien à proposer » doit se lire
+    aussi : tout est déjà attribué, ou rien n'a été vu. Un rapport illisible vaut une
+    page sans propositions, pas une erreur."""
     from ..personas import Report, pending
 
     path = project.personas_file
     if not path.exists():
-        return []
+        return [], None
     try:
         report = Report.from_json(path.read_text(encoding="utf-8"))
     except (ValueError, TypeError):
-        return []
-    return pending([b for b in report.blocks if b.chapter == chapter], text)
+        return [], None
+    here = [b for b in report.blocks if b.chapter == chapter]
+    blocks = pending(here, text)
+    summary = {
+        "personas": report.personas,
+        "chapters": report.chapters,
+        "done": len(here) - len(blocks),
+        "rejected": len(report.rejected),
+        "error": report.error,
+    }
+    return blocks, summary
 
 
 def load_suggestions(project: Project) -> list:
@@ -741,6 +752,7 @@ def review_chapter(request: Request, name: str, number: int, find: str = ""):
 
     chapter = Chapter.from_markdown(path.read_text(encoding="utf-8"))
     suspects = inspect_texts({path.name: chapter.text}, language=project.language)
+    blocks, persona_report = load_blocks(project, path.name, chapter.text)
     reasons = sorted({s.reason for s in suspects})
     numbers = sorted(int(p.stem.removeprefix("ch")) for p in project.text_dir.glob("ch*.md"))
     titles = {int(s["number"]): s["title"] for s in project.chapter_states()}
@@ -754,7 +766,8 @@ def review_chapter(request: Request, name: str, number: int, find: str = ""):
         reasons=reasons,
         personas=project.personas(),
         suggestions=[s for s in load_suggestions(project) if s.chapter == path.name],
-        blocks=load_blocks(project, path.name, chapter.text),
+        blocks=blocks,
+        persona_report=persona_report,
         numbers=numbers,
         titles=titles,
         previous=max([n for n in numbers if n < number], default=None),

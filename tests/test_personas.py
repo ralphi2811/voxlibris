@@ -6,7 +6,15 @@ from __future__ import annotations
 import json
 
 from voxlibris.llm import LLM, LLMConfig, LLMError
-from voxlibris.personas import Block, Report, discover, paragraphs_of, pending, readers
+from voxlibris.personas import (
+    Block,
+    Persona,
+    Report,
+    discover,
+    paragraphs_of,
+    pending,
+    readers,
+)
 
 CHAPITRE = "\n\n".join(
     [
@@ -81,8 +89,11 @@ class TestReperage:
         )
         report = discover({"ch01.md": marked}, known=["Charles"], llm=llm)
         assert "Personas déjà connus : Charles" in llm.prompts[0]
-        assert report.personas == []  # déjà connu, sous une autre casse
-        assert report.blocks == [] and report.rejected == []  # déjà attribué dans le texte
+        # Déjà connu, sous une autre casse : cité au rapport sous son nom connu.
+        assert report.personas == [Persona("Charles", "le frère")]
+        # Déjà attribué dans le texte : au rapport, mais plus rien à proposer.
+        assert [b.persona for b in report.blocks] == ["Charles"] and report.rejected == []
+        assert pending(report.blocks, marked) == []
         # Les marqueurs ne sont pas montrés au modèle, mais ils comptent dans les numéros,
         # qui restent ceux du texte tel qu'il est.
         assert "[2] Ma Lulu," in llm.prompts[0] and "@charles" not in llm.prompts[0]
