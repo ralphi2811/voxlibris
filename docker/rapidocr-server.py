@@ -105,7 +105,7 @@ async def ocr(request: Request) -> dict:
             raise HTTPException(400, f"Image illisible : {error}") from error
     lines = []
     if result.boxes is not None and result.txts is not None:
-        for box, text, score in zip(result.boxes, result.txts, result.scores):
+        for box, text, score in zip(result.boxes, result.txts, result.scores, strict=False):
             lines.append(
                 {
                     "text": str(text),
@@ -116,7 +116,12 @@ async def ocr(request: Request) -> dict:
     height, width = result.img.shape[:2] if result.img is not None else (0, 0)
     elapsed = time.monotonic() - started
     log.info("%dx%d px → %d lignes en %.1f s", width, height, len(lines), elapsed)
-    return {"lines": lines, "width": int(width), "height": int(height), "elapsed": round(elapsed, 2)}
+    return {
+        "lines": lines,
+        "width": int(width),
+        "height": int(height),
+        "elapsed": round(elapsed, 2),
+    }
 
 
 if __name__ == "__main__":
