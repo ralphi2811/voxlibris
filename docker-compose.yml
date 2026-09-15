@@ -8,6 +8,7 @@
 #   docker compose --profile voxtral ... up            ajoute le serveur Voxtral local
 #   docker compose --profile zonos2 ... up             ajoute le serveur ZONOS2 local
 #   docker compose --profile omnivoice ... up          ajoute le serveur OmniVoice local
+#   docker compose --profile rapidocr ... up           ajoute la lecture des scans sans texte
 #
 # Sans GPU, Piper et Kokoro tournent sur processeur ; XTTS, Voxtral et ZONOS2 en réclament un.
 # Les réglages (modèle de langage, clés, licence XTTS) viennent du fichier .env : copiez
@@ -158,6 +159,23 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  # RapidOCR chez vous : la reconnaissance de caractères des PDF scannés qui n'ont pas de
+  # couche de texte. Sur processeur, sans carte, un peu moins d'un gigaoctet, modèles
+  # PP-OCR (Apache 2.0) embarqués. Facultatif — profil « rapidocr » ; l'atelier le réveille
+  # au dépôt d'un scan et l'endort après. Le serveur HTTP est le nôtre
+  # (docker/rapidocr-server.py). Pour un serveur ailleurs, dans le .env :
+  #   VOXLIBRIS_RAPIDOCR_BASE_URL=http://rapidocr:1921
+  rapidocr:
+    profiles: ["rapidocr"]
+    build:
+      context: .
+      dockerfile: docker/rapidocr.Dockerfile
+    image: ghcr.io/ralphi2811/voxlibris-rapidocr:latest
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file:
+      - path: .env
+        required: false
 
 volumes:
   models:

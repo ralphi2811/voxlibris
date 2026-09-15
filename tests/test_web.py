@@ -866,3 +866,50 @@ class TestDistribution:
         client.post(f"/projects/{name}/voice", data={"backend": "kokoro", "voice": "ff_siwis"})
         # Le persona reste, sa voix — qui appartenait à l'autre moteur — non.
         assert app_module.load_project(name).voices == {"Charles": ""}
+
+
+class TestScan:
+    """Un PDF sans couche de texte : le projet naît vide, et l'atelier est appelé."""
+
+    def _scan(self, tmp_path):
+        import pymupdf
+
+        doc = pymupdf.open()
+        for _ in range(2):
+            doc.new_page()
+        path = tmp_path / "Une_Histoire.pdf"
+        doc.save(str(path))
+        return path
+
+    def test_le_depot_cree_le_projet_et_la_tache(self, client, tmp_path):
+        path = self._scan(tmp_path)
+        with path.open("rb") as handle:
+            response = client.post(
+                "/projects", files={"file": (path.name, handle)}, follow_redirects=False
+            )
+        assert response.status_code == 303
+        page = client.get(response.headers["location"])
+        assert page.status_code == 200
+        assert "Lecture du scan" in page.text and "Une Histoire" in page.text
+        from voxlibris.web import app as app_module
+
+        (job,) = app_module.queue.list()
+        assert job.kind == "ocr" and job.project == "une-histoire"
+        assert "scan à lire" in page.text or "lecture en cours" in page.text
+
+    def test_relire_le_scan_depose_une_tache_forcee(self, client, tmp_path):
+        path = self._scan(tmp_path)
+        with path.open("rb") as handle:
+            client.post("/projects", files={"file": (path.name, handle)})
+        from voxlibris.web import app as app_module
+
+        first = app_module.queue.claim()
+        app_module.queue.finish(first.id)
+        response = client.post(
+            "/projects/une-histoire/jobs/ocr", data={"force": "1"}, follow_redirects=False
+        )
+        assert (
+            response.status_code == 303 and response.headers["location"] == "/projects/une-histoire"
+        )
+        job = app_module.queue.active("une-histoire")
+        assert job.kind == "ocr" and job.params == {"force": True}

@@ -6,6 +6,24 @@
 {% set seconds = tracks|sum(attribute="seconds") %}
 {% include "project/_head.html" %}
 
+{% if project.kind == "pdf-scan-image" %}
+<section class="card pad stack">
+  <div class="row"><strong>Lecture du scan</strong><span class="spacer"></span>
+    {% if job and job.kind == "ocr" %}<span class="chip accent">{{ icons.ic("clock", 12) }}en cours</span>
+    {% elif project.notes.get("OCR") %}<span class="chip ok">{{ icons.ic("check", 12) }}lu</span>
+    {% else %}<span class="chip warn">{{ icons.ic("warn", 12) }}à lire</span>{% endif %}
+  </div>
+  <p class="muted small">Ce PDF n'a pas de couche de texte : le service RapidOCR (profil « rapidocr » du Compose) lit les mots sur l'image de chaque page, puis le texte prend le chemin d'un scan ordinaire, relecture comprise.{% if project.notes.get("OCR") %} {{ project.notes["OCR"] }}.{% endif %}</p>
+  {% if not job %}
+  <form method="post" action="/projects/{{ name }}/jobs/ocr" class="row">
+    {% if status["relu"] %}<label class="toggle-row"><input type="checkbox" name="force"><span class="toggle"></span><span>Refaire la lecture : le texte relu reste, le brut est refait</span></label>{% endif %}
+    <span class="spacer"></span>
+    <button class="btn{% if not tracks %} primary{% endif %}" type="submit">{{ icons.ic("refresh") }}{% if tracks %}Relire le scan{% else %}Lire le scan{% endif %}</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
 <div class="cols main-side">
   <section class="card">
     <div class="card-head">

@@ -30,7 +30,8 @@ from fastapi.templating import Jinja2Templates
 from .. import atelier, pages
 from ..concierge import served_state
 from ..config import EDITABLE, SECRETS, origin, setting, voices_dir, write_settings
-from ..document import Chapter
+from ..document import Chapter, Document
+from ..ingest import Kind, NeedsOCR
 from ..ingest import ingest as ingest_book
 from ..project import Project
 from ..tts.backends import BACKENDS, SPEED_RANGE
@@ -116,6 +117,7 @@ PER_BACKEND = 4
 
 # Page où l'on atterrit après une tâche, selon sa nature.
 LANDING = {
+    "ocr": "",
     "normalize": "prepare",
     "proofread": "review/1",
     "personas": "review/1",
@@ -400,6 +402,14 @@ def steps_for(name: str, project: Project, active: str) -> list[dict[str, object
     else:
         review_note, review_tone = "relu", ""
 
+    if chapters == 0 and project.kind == Kind.PDF_IMAGE.value:
+        reading = running is not None and running.kind == "ocr"
+        chapters_note, chapters_tone = (
+            ("lecture en cours", "accent") if reading else ("scan à lire", "warn")
+        )
+    else:
+        chapters_note, chapters_tone = f"{chapters}", ""
+
     current = sum(1 for t in tracks if t["current"])
     if running and running.kind in ("synth", "resynth"):
         synth_note, synth_tone = "en cours", "accent"
@@ -409,7 +419,9 @@ def steps_for(name: str, project: Project, active: str) -> list[dict[str, object
         synth_note, synth_tone = f"{current}/{len(tracks)} pistes", ""
 
     return [
-        step("chapters", "Chapitres", f"/projects/{name}", chapters > 0, f"{chapters}"),
+        step(
+            "chapters", "Chapitres", f"/projects/{name}", chapters > 0, chapters_note, chapters_tone
+        ),
         step(
             "review",
             "Relecture",
@@ -547,8 +559,13 @@ async def create_project(
         shutil.copyfileobj(file.file, target)
 
     kwargs = {k: v for k, v in {"title": title, "author": author}.items() if v}
+    needs_ocr = False
     try:
         document = ingest_book(source, **kwargs)
+    except NeedsOCR:
+        # Un scan sans texte : le projet naît vide, et l'atelier y lit les mots.
+        document = empty_scan(source, **kwargs)
+        needs_ocr = True
     except (ValueError, NotImplementedError) as error:
         raise HTTPException(400, str(error)) from error
     if language:
@@ -562,7 +579,24 @@ async def create_project(
         suffix += 1
 
     Project.create(directory, document)
+    if needs_ocr:
+        queue.enqueue(directory.name, "ocr")
     return RedirectResponse(f"/projects/{directory.name}", status_code=303)
+
+
+def empty_scan(source: Path, title: str = "", author: str = "") -> Document:
+    """Le document d'un scan encore illisible : ce que le fichier dit de lui, sans texte."""
+    from ..ingest.metadata import peek
+
+    found = peek(source)
+    return Document(
+        title=title or found.get("title") or source.stem.replace("_", " ").strip() or "Scan",
+        author=author or found.get("author") or "Inconnu",
+        year=found.get("year"),
+        source=source,
+        needs_review=True,
+        notes={"kind": Kind.PDF_IMAGE.value},
+    )
 
 
 @app.post("/projects/{name}/delete")
@@ -1135,6 +1169,8 @@ async def enqueue_job(request: Request, name: str, kind: str):
         }
     elif kind == "assemble":
         params = {"skip_mp3": not form.get("mp3")}
+    elif kind == "ocr":
+        params = {"force": bool(form.get("force"))}
     elif kind not in ("proofread", "personas"):
         raise HTTPException(404, "Tâche inconnue")
 
@@ -1314,6 +1350,14 @@ def test_service(request: Request, service: str):
             voices = client.speakers()
             ok = True
             text = f"serveur local · {health.get('device') or '?'} · {len(voices)} voix"
+        except Exception as error:
+            ok, text = False, str(error)
+    elif service == "rapidocr":
+        from ..ingest.ocr import Client
+
+        try:
+            health = Client().probe()
+            ok, text = True, f"serveur local · écriture « {health.get('lang') or '?'} »"
         except Exception as error:
             ok, text = False, str(error)
     else:

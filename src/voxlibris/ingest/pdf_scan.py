@@ -27,11 +27,15 @@ from .layout import Layout, body_page_range, detect
 
 LINE_TOLERANCE = 3.0  # écart vertical maximal, en points, entre spans d'une même ligne
 INDENT = 4.0  # décalage minimal, en points, pour qu'une ligne compte comme un alinéa
+# Une ligne plus courte que cette fraction d'une ligne pleine, et qui s'achève sur une
+# ponctuation finale, est la dernière d'un paragraphe — même sans alinéa après elle.
+SHORT_LINE = 0.8
+CLOSING = tuple('.!?…»”"’')
 MIN_LETTERS = 3
 MIN_WORD_RATIO = 0.6
 LONG_LINE = 20  # au-delà, une ligne est du texte même si l'OCR l'a massacrée
 VOWELS = set("aeiouyàâäéèêëîïôöûüùAEIOUYÀÂÄÉÈÊËÎÏÔÖÛÜÙ")
-PUNCT = ".,;:!?«»()[]\"'’…—–-*"
+PUNCT = ".,;:!?«»()[]\"'‘’“”‚…—–-*"
 
 CHAPTER_MARKER = re.compile(r"\b(?:CHAPITRE|CHAPTER|CAPÍTULO|KAPITEL)\s*(\d{1,3}|[IVXLC]+)\b", re.I)
 ROMAN = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100}
@@ -44,6 +48,9 @@ class Line:
     x: float
     size: float
     page: int
+    width: float = (
+        0.0  # inconnue (zéro) sur les anciens appels : la règle de la ligne courte ne joue pas
+    )
 
 
 @dataclass
@@ -127,7 +134,7 @@ def is_garbage(text: str, size: float, layout: Layout) -> bool:
 def group_lines(page: pymupdf.Page, layout: Layout) -> tuple[str, list[Line], list[str]]:
     """Regroupe les spans d'une page en lignes, séparant en-tête, corps et rebut."""
     header_spans: list[tuple[float, str]] = []
-    body_spans: list[tuple[float, float, float, str]] = []
+    body_spans: list[tuple[float, float, float, str, float]] = []
 
     for block in page.get_text("dict")["blocks"]:
         if block["type"] != 0:
@@ -141,14 +148,14 @@ def group_lines(page: pymupdf.Page, layout: Layout) -> tuple[str, list[Line], li
                 if y < layout.header_y:
                     header_spans.append((span["bbox"][0], text))
                 elif y < layout.footer_y:
-                    body_spans.append((y, span["bbox"][0], span["size"], text))
+                    body_spans.append((y, span["bbox"][0], span["size"], text, span["bbox"][2]))
 
     header = normalize_header(" ".join(t for _, t in sorted(header_spans)))
 
     body_spans.sort(key=lambda s: (s[0], s[1]))
     lines: list[Line] = []
     dropped: list[str] = []
-    current: list[tuple[float, float, float, str]] = []
+    current: list[tuple[float, float, float, str, float]] = []
 
     def flush() -> None:
         if not current:
@@ -159,7 +166,8 @@ def group_lines(page: pymupdf.Page, layout: Layout) -> tuple[str, list[Line], li
         if is_garbage(text, size, layout):
             dropped.append(f"[{size:4.1f}pt] {text}")
         else:
-            lines.append(Line(text, current[0][0], current[0][1], size, page.number + 1))
+            width = max(s[4] for s in current) - current[0][1]
+            lines.append(Line(text, current[0][0], current[0][1], size, page.number + 1, width))
         current.clear()
 
     for span in body_spans:
@@ -188,22 +196,36 @@ def build_paragraphs(lines: list[Line]) -> list[str]:
     La marge gauche diffère entre recto et verso : elle est mesurée page par page, sans
     quoi toutes les lignes des rectos passent pour des alinéas et chaque ligne devient un
     paragraphe.
+
+    Bien des éditions n'ont pas d'alinéa : le paragraphe ne se voit qu'à sa dernière ligne,
+    plus courte et close par une ponctuation. La largeur d'une ligne pleine est la médiane
+    des largeurs de la page — sur une page de récit, la plupart des lignes sont pleines.
     """
     if not lines:
         return []
     margins: dict[int, float] = {}
+    widths: dict[int, list[float]] = {}
     for line in lines:
         margins[line.page] = min(margins.get(line.page, line.x), line.x)
+        if line.width:
+            widths.setdefault(line.page, []).append(line.width)
+    full = {page: statistics.median(found) for page, found in widths.items()}
 
     paragraphs: list[list[str]] = []
+    closed = False
     for line in lines:
         text = line.text.strip()
         starts_dialogue = text.startswith(("—", "–", "-"))
         indented = line.x > margins[line.page] + INDENT
-        if not paragraphs or starts_dialogue or indented:
+        if not paragraphs or starts_dialogue or indented or closed:
             paragraphs.append([text])
         else:
             paragraphs[-1].append(text)
+        closed = (
+            line.page in full
+            and 0 < line.width < SHORT_LINE * full[line.page]
+            and text.endswith(CLOSING)
+        )
     return [" ".join(dehyphenate(p)) for p in paragraphs]
 
 

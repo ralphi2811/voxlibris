@@ -55,6 +55,7 @@ class TestInventaire:
             "voxtral": {"state": "absent", "name": ""},
             "zonos2": {"state": "stopped", "name": "voxlibris-zonos2-1"},
             "omnivoice": {"state": "running", "name": "voxlibris-omnivoice-1"},
+            "rapidocr": {"state": "absent", "name": ""},
         }
         assert c.running() == ["omnivoice"]
 

@@ -40,6 +40,7 @@ def configured(served: dict | None = None) -> dict[str, bool]:
     Un conteneur du projet Compose vaut adresse, même endormi : le concierge le réveillera.
     """
     from .concierge import implied_url
+    from .ingest.ocr import base_url as ocr_url
     from .tts.omnivoice import base_url as omnivoice_url
     from .tts.voxtral import api_key, base_url
     from .tts.zonos2 import base_url as zonos2_url
@@ -50,6 +51,8 @@ def configured(served: dict | None = None) -> dict[str, bool]:
         or "api.mistral.ai" not in (base_url() if not implied_url("voxtral", served) else ""),
         "zonos2": bool(zonos2_url() or implied_url("zonos2", served)),
         "omnivoice": bool(omnivoice_url() or implied_url("omnivoice", served)),
+        # Pas une voix : la lecture des scans. Même logique, même conteneur à réveiller.
+        "rapidocr": bool(ocr_url() or implied_url("rapidocr", served)),
     }
 
 

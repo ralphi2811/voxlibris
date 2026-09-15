@@ -77,6 +77,11 @@ SERVED: dict[str, Served] = {
     "omnivoice": Served(
         "omnivoice", "http://omnivoice:1920", "http://omnivoice:1920", "/health", 3.0, 45
     ),
+    # Pas un moteur de voix : la lecture des scans. Sur processeur, il ne prend rien sur
+    # la carte, et n'a donc jamais à en déloger un autre.
+    "rapidocr": Served(
+        "rapidocr", "http://rapidocr:1921", "http://rapidocr:1921", "/health", 0.0, 20
+    ),
 }
 
 # Ce que les moteurs embarqués dans l'atelier prennent sur la carte le temps d'une tâche.

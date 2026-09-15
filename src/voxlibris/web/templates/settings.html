@@ -48,6 +48,12 @@
   </section>
 
   <section class="card pad stack">
+    <div class="row"><strong>RapidOCR</strong><span class="spacer"></span><span class="verdict" id="verdict-rapidocr"></span><button class="btn sm" type="button" data-test="rapidocr">{{ icons.ic("refresh", 14) }}Tester</button></div>
+    {{ field("VOXLIBRIS_RAPIDOCR_BASE_URL", "Adresse du serveur", "http://rapidocr:1921 — le service Compose sous « --profile rapidocr »") }}
+    <span class="muted small">Lit les PDF scannés sans couche de texte, au dépôt. Sur processeur, sans carte ; modèles PP-OCR Apache 2.0, rien ne quitte la machine.</span>
+  </section>
+
+  <section class="card pad stack">
     <strong>Moteurs et matériel</strong>
     <input type="hidden" name="COQUI_TOS_AGREED__present" value="1">
     <label class="toggle-row"><input type="checkbox" name="COQUI_TOS_AGREED" {% if settings["COQUI_TOS_AGREED"].value == "1" %}checked{% endif %}><span class="toggle"></span>
@@ -59,7 +65,7 @@
         <option value="cpu" {% if settings["VOXLIBRIS_DEVICE"].value == "cpu" %}selected{% endif %}>Processeur</option>
       </select></label>
     {{ field("VOXLIBRIS_GPU_IDLE_MIN", "Rendre la carte graphique après (minutes)", "15 — 0 pour ne jamais endormir les serveurs") }}
-    <span class="muted small">Les serveurs de synthèse — Voxtral, ZONOS2, OmniVoice — sont réveillés par la tâche qui les demande, et endormis passé ce délai sans rien faire.{% if atelier.online and not atelier.docker %} Sans le relais Docker du Compose, l'atelier ne réveille ni n'endort rien.{% endif %}</span>
+    <span class="muted small">Les serveurs sous profil — Voxtral, ZONOS2, OmniVoice, RapidOCR — sont réveillés par la tâche qui les demande, et endormis passé ce délai sans rien faire.{% if atelier.online and not atelier.docker %} Sans le relais Docker du Compose, l'atelier ne réveille ni n'endort rien.{% endif %}</span>
     {% if atelier.online %}<div class="chips">{% for e, ok in atelier.engines.items() %}{% set st = atelier.served.get(e, {}).get("state") if atelier.served else none %}<span class="chip {% if st == "stopped" %}warn{% elif ok %}ok{% else %}muted{% endif %}">{{ e }}{% if st == "running" %} · prêt{% elif st == "stopped" %} · en veille{% endif %}</span>{% endfor %}{% if atelier.gpu %}<span class="chip info">{{ atelier.gpu }}</span>{% endif %}</div>{% endif %}
     {% if atelier.online and atelier.docker %}<div class="row"><button class="btn sm" type="submit" form="release-form">{{ icons.ic("gpu", 14) }}Libérer la carte maintenant</button>{% if atelier.release_in_s %}<span class="muted small">sinon dans {{ (atelier.release_in_s / 60) | round | int }} min</span>{% endif %}{% if released %}<span class="chip ok">demandé à l'atelier</span>{% endif %}</div>{% endif %}
   </section>

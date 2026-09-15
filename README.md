@@ -33,6 +33,7 @@ Selon la source, l'effort n'est pas le même — autant le dire franchement :
 | **EPUB issu d'un PDF** (pdf2htmlEX, pages positionnées) | Presque aucune. Lu comme un PDF : paragraphes recomposés, folios et étiquettes de dessins écartés, glyphes de ligatures retrouvés par les polices embarquées puis par le dictionnaire. |
 | **PDF texte natif** | Marginale. |
 | **PDF scanné** | **Oui, et c'est le gros du travail.** L'OCR se trompe, et un `1l` lu à voix haute ne pardonne pas. |
+| **PDF scanné sans couche de texte** | Idem, une étape avant : le service RapidOCR (profil `rapidocr`) lit d'abord les mots sur l'image des pages, au dépôt. |
 
 voxlibris ne supprime pas cette relecture, il la rend rapide : texte éditable face à
 l'image de la page, mots suspects surlignés, écoute d'un segment en un clic, et un
@@ -74,21 +75,23 @@ déclarer avec cette même paire de fichiers :
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml \
-  --profile omnivoice --profile zonos2 --profile voxtral pull
+  --profile omnivoice --profile zonos2 --profile voxtral --profile rapidocr pull
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml \
-  --profile omnivoice --profile zonos2 --profile voxtral up -d
+  --profile omnivoice --profile zonos2 --profile voxtral --profile rapidocr up -d
 ```
 
 Déclarez-en autant que vous voulez : ils ne tiennent pas tous sur une carte à la fois,
 et l'atelier s'en charge, voir [le concierge](#le-concierge-de-la-carte-graphique). Leurs
 poids se téléchargent au premier démarrage, dans le volume `models`, qui survit aux
-reconstructions.
+reconstructions. Le profil `rapidocr` n'est pas un moteur de voix : c'est la lecture des
+scans sans couche de texte, sur processeur, voir [Un scan sans texte](#un-scan-sans-texte--rapidocr).
 
 | Image | Taille | Contenu |
 |---|---|---|
 | `ghcr.io/ralphi2811/voxlibris-web` | 0,5 Go | l'interface |
-| `ghcr.io/ralphi2811/voxlibris-worker` | 15 Go | PyTorch, XTTS, Kokoro, Piper, Tesseract, ffmpeg |
+| `ghcr.io/ralphi2811/voxlibris-worker` | 15 Go | PyTorch, XTTS, Kokoro, Piper, ffmpeg |
 | `ghcr.io/ralphi2811/voxlibris-omnivoice` | 13 Go | PyTorch et OmniVoice, profil `omnivoice` seulement |
+| `ghcr.io/ralphi2811/voxlibris-rapidocr` | 1 Go | RapidOCR sur ONNX Runtime, processeur seul, profil `rapidocr` seulement |
 | `ghcr.io/ralphi2811/voxlibris-voxtral` | 30 Go | vLLM, profil `voxtral` seulement |
 | `ghcr.io/ralphi2811/voxlibris-zonos2` | 37 Go | serveur de Zyphra sur CUDA complet, profil `zonos2` seulement |
 
@@ -135,7 +138,7 @@ coup d'œil où en est chaque livre et ce qui reste à faire.
   rejouer, valider. Rejouer un segment le recolle dans sa piste sans refaire le
   chapitre ; le valider le garde tel quel, l'oreille ayant le dernier mot.
 - **Assemblage** et **Journal** des tâches.
-- **Réglages** : modèle de langage, Voxtral, ZONOS2, OmniVoice, licence XTTS, carte
+- **Réglages** : modèle de langage, Voxtral, ZONOS2, OmniVoice, RapidOCR, licence XTTS, carte
   graphique — enregistrés dans le dossier des données, pris en compte sans redémarrage,
   avec un bouton Tester par service. Le `.env` reste la couche de dessous.
 
@@ -156,6 +159,29 @@ sa carte graphique, ses moteurs, et l'état des serveurs qu'il garde.
 
 Les trois premiers vivent dans l'atelier ; les trois autres sont des serveurs à part,
 sous profil, que l'atelier réveille à la demande.
+
+### Un scan sans texte : RapidOCR
+
+Un PDF scanné d'Internet Archive porte déjà sa couche de texte ; un scan fait maison, ou
+un album numérisé en images, n'en a aucune. Déposé tel quel, il crée un projet vide et
+une tâche de lecture : l'atelier réveille le service [RapidOCR](https://github.com/RapidAI/RapidOCR)
+(profil `rapidocr`), lui envoie l'image de chaque page, et **pose le texte lu sur le PDF
+lui-même**, invisible, à la place des mots — exactement la couche d'un scan océrisé. Le
+fichier prend ensuite le chemin ordinaire du scan : mise en page mesurée, chapitrage,
+image de la page en regard du texte à la relecture. Une page de travers est redressée
+d'après sa marge ; une police TrueType de la machine porte les caractères que les
+polices de base d'un PDF ignorent, « œ », guillemets et tiret cadratin compris.
+
+RapidOCR exécute les modèles PP-OCR de PaddleOCR (Apache 2.0) sous ONNX Runtime, sur
+processeur : une à deux secondes par page, sans carte graphique, et il repère le texte
+posé sur une illustration là où Tesseract ne rendrait que du bruit. Le modèle chargé lit
+l'écriture latine, français et accents compris (`RAPIDOCR_LANG` dans le `.env` pour une
+autre écriture). Les modèles sont embarqués dans l'image : rien à télécharger, rien ne
+sort de la machine. En ligne de commande, `voxlibris ocr scan.pdf` produit le PDF lu, à
+passer ensuite à `voxlibris ingest`.
+
+Le texte lu reste à relire, comme tout OCR ; mais un scan déposé le matin est lisible en
+Relecture une minute plus tard, sans autre outil.
 
 ### Plusieurs voix : la distribution
 
@@ -343,11 +369,11 @@ détaille.
 
 ```bash
 uv sync --group dev          # le cœur, sans PyTorch ni moteur
-uv run pytest -q             # 294 tests, quelques secondes, aucune carte requise
+uv run pytest -q             # 347 tests, quelques secondes, aucune carte requise
 uv run ruff check . && uv run ruff format --check .
 ```
 
-Les moteurs s'installent avec `uv sync --extra tts --extra ocr`, ce qui tire PyTorch.
+Les moteurs s'installent avec `uv sync --extra tts`, ce qui tire PyTorch.
 L'intégration continue de GitHub fait exactement les trois lignes ci-dessus, sur
 Ubuntu, sans carte.
 
@@ -383,8 +409,11 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build --n
   ```
 
 - **Un serveur sous profil ne se réveille pas** : `docker logs voxlibris-zonos2-1` (ou
-  `-omnivoice-1`, `-voxtral-1`) dit pourquoi ; le premier démarrage télécharge les poids
-  et peut prendre plusieurs minutes.
+  `-omnivoice-1`, `-voxtral-1`, `-rapidocr-1`) dit pourquoi ; le premier démarrage
+  télécharge les poids et peut prendre plusieurs minutes.
+- **Un scan déposé reste « à lire »** : la tâche de lecture a échoué, le Journal des tâches
+  dit pourquoi — le plus souvent, la pile a été lancée sans `--profile rapidocr`. Ajoutez
+  le profil, puis « Lire le scan » sur la page du projet.
 
 ## État du projet
 

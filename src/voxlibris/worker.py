@@ -14,6 +14,7 @@ from __future__ import annotations
 import gc
 import json
 import logging
+import os
 import signal
 import time
 from pathlib import Path
@@ -466,6 +467,70 @@ def run_personas(project: Project, job: Job, queue: Queue) -> None:
     )
 
 
+def run_ocr(project: Project, job: Job, queue: Queue) -> None:
+    """Lit un scan sans couche de texte, puis l'extrait comme un scan océrisé.
+
+    Le PDF produit — les mêmes images, le texte lu posé dessus, invisible — devient la
+    source du projet : couverture, pages en regard de la relecture et toute extraction
+    en viennent. Le texte relu, s'il existe, n'est jamais touché ; le brut est refait.
+    """
+    from .ingest import pdf_scan
+    from .ingest.ocr import Client, ocr_pdf
+
+    source = Path(project.source or "")
+    if source.suffix.lower() != ".pdf" or not source.exists():
+        raise RuntimeError("Pas de PDF à lire : la source du projet est introuvable.")
+    if any(project.clean_dir.glob("ch*.md")) and not job.params.get("force"):
+        raise RuntimeError(
+            "Le texte a déjà été relu : relire le scan referait le texte brut, sans "
+            "toucher au relu. Cochez « refaire » si c'est bien ce que vous voulez."
+        )
+    wake("rapidocr", job, queue)
+    client = Client()
+    health = client.probe()
+    queue.report(job.id, 0.02, f"RapidOCR prêt, écriture « {health.get('lang', '?')} »")
+
+    # Le fichier lu est écrit à côté du projet ; le dépôt d'origine reste tel quel. À la
+    # relecture d'un scan déjà lu, on repart de ce fichier — les images sont les mêmes.
+    target = (
+        project.root
+        / "work"
+        / (source.name.removesuffix(".ocr.pdf").removesuffix(".pdf") + ".ocr.pdf")
+    )
+    scratch = target.with_suffix(".tmp.pdf")
+    stats = ocr_pdf(
+        source,
+        scratch,
+        client,
+        on_page=lambda i, n, lines: queue.report(
+            job.id, 0.02 + 0.85 * i / n, f"page {i}/{n} : {lines} lignes lues"
+        ),
+    )
+    os.replace(scratch, target)
+
+    document = pdf_scan.ingest(target, title=project.title, author=project.author or "Inconnu")
+    document.language = project.language
+    for old in project.raw_dir.glob("ch*.md"):
+        old.unlink()
+    document.write(project.raw_dir)
+    project.source = str(target)
+    project.needs_review = True
+    project.notes.update(
+        {k: v for k, v in document.notes.items() if k not in ("dropped_lines", "kind")}
+    )
+    project.notes["OCR"] = (
+        f"RapidOCR : {stats['lines']} lignes sur {stats['pages']} pages en "
+        f"{stats['seconds']} s ; {stats['font']}"
+    )
+    project.save()
+    queue.report(
+        job.id,
+        1.0,
+        f"{stats['lines']} lignes lues sur {stats['pages']} pages : "
+        f"{len(document.chapters)} chapitre(s), à relire.",
+    )
+
+
 def run_sample(project: Project, job: Job, queue: Queue) -> None:
     """Synthétise un même extrait avec plusieurs voix, pour choisir à l'oreille."""
     from .tts.backends import load
@@ -603,6 +668,7 @@ def run_assemble(project: Project, job: Job, queue: Queue) -> None:
 
 
 HANDLERS = {
+    "ocr": run_ocr,
     "normalize": run_normalize,
     "proofread": run_proofread,
     "personas": run_personas,

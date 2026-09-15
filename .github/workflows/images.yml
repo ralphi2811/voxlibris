@@ -1,4 +1,4 @@
-# Les cinq images de voxlibris, publiées sur ghcr.io — gratuit pour un dépôt public, comme
+# Les six images de voxlibris, publiées sur ghcr.io — gratuit pour un dépôt public, comme
 # les minutes de ces machines. Leur disque, une fois les outils préinstallés retirés,
 # offre plus de cent gigaoctets : ZONOS2, 37 Go, y passe en un quart d'heure. Le cache de
 # couches vit lui aussi sur ghcr.io, sans quoi PyTorch et vLLM se retéléchargeraient à
@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [web, worker, omnivoice, voxtral, zonos2]
+        image: [web, worker, omnivoice, voxtral, zonos2, rapidocr]
     steps:
       - name: Faire de la place
         run: |

@@ -10,13 +10,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # ffmpeg : assemblage des MP3 et du M4B. espeak-ng : phonémisation du français pour
-# Kokoro. tesseract : OCR des scans sans couche texte. libsndfile : lecture des WAV.
+# Kokoro. fonts-dejavu : la police de la couche de texte posée sur un scan lu par
+# RapidOCR (ingest/ocr.py). libsndfile : lecture des WAV.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         espeak-ng \
         libsndfile1 \
-        tesseract-ocr \
-        tesseract-ocr-fra \
+        fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -26,7 +26,7 @@ WORKDIR /app
 COPY pyproject.toml LICENSE ./
 COPY docker/worker.constraints.txt ./constraints.txt
 RUN touch README.md && mkdir -p src/voxlibris && touch src/voxlibris/__init__.py \
-    && pip install -c constraints.txt ".[tts,ocr]"
+    && pip install -c constraints.txt ".[tts]"
 COPY README.md ./
 COPY src ./src
 RUN pip install --no-deps .

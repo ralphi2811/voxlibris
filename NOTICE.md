@@ -19,6 +19,12 @@ engage donc l'utilisateur au moment où il choisit de l'exécuter.
 | **ZONOS2** (Zyphra) | Apache 2.0 | Aucune restriction d'usage ; serveur sous MIT |
 | **OmniVoice** (k2-fsa) | Apache 2.0 | Aucune restriction d'usage ; Whisper (MIT) transcrit les extraits |
 
+## Reconnaissance de caractères
+
+| Outil | Licence | Portée |
+|---|---|---|
+| **RapidOCR** (RapidAI) et les modèles **PP-OCR** (PaddlePaddle) | Apache 2.0 | Aucune restriction d'usage ; profil `rapidocr`, sur processeur, modèles embarqués dans l'image |
+
 ### Voxtral TTS : la restriction est à l'envers des autres
 
 Pour les moteurs locaux, voxlibris exécute des poids téléchargés sur votre machine. Pour

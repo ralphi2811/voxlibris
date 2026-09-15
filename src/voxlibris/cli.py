@@ -67,6 +67,36 @@ def ingest(
 
 
 @app.command()
+def ocr(
+    source: Path = typer.Argument(..., help="PDF scanné sans couche de texte"),
+    target: Path = typer.Argument(
+        None, help="PDF à écrire, texte invisible en plus (défaut : <source>.ocr.pdf)"
+    ),
+    url: str = typer.Option("", help="serveur RapidOCR (défaut : VOXLIBRIS_RAPIDOCR_BASE_URL)"),
+) -> None:
+    """Lit un scan avec le service RapidOCR ; le PDF produit se passe à « ingest »."""
+    from .ingest.ocr import Client, OCRError, ocr_pdf
+
+    target = target or source.with_suffix(".ocr.pdf")
+    try:
+        client = Client(url)
+        client.probe()
+        stats = ocr_pdf(
+            source,
+            target,
+            client,
+            on_page=lambda i, n, lines: console.print(f"page {i}/{n} : {lines} lignes"),
+        )
+    except OCRError as error:
+        console.print(f"[red]{error}[/red]")
+        raise typer.Exit(1) from error
+    console.print(
+        f"[bold]{target}[/bold] : {stats['lines']} lignes sur {stats['pages']} pages "
+        f"({stats['font']}). Puis : voxlibris ingest {target} <dossier>"
+    )
+
+
+@app.command()
 def review(
     root: Path,
     vocabulary: Path = typer.Option(None, help="fichier de mots propres à l'ouvrage"),

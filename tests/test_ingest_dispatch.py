@@ -59,8 +59,19 @@ class TestAiguillage:
         doc.new_page()
         path = tmp_path / "scan.pdf"
         doc.save(str(path))
-        with pytest.raises(NotImplementedError, match="océriser"):
+        with pytest.raises(ingest.NeedsOCR, match="lire les mots"):
             ingest.ingest(path)
+
+    def test_la_couche_posee_par_voxlibris_est_reconnue(self, tmp_path):
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text((50, 50), "Du texte invisible.", fontsize=11, render_mode=3)
+        doc.set_metadata({"producer": ingest.OCR_PRODUCER + " · RapidOCR"})
+        path = tmp_path / "scan.ocr.pdf"
+        doc.save(str(path))
+        assert ingest.detect_kind(path) is Kind.PDF_OCR
 
     def test_fichier_absent(self, tmp_path):
         with pytest.raises(FileNotFoundError):

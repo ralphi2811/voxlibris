@@ -69,7 +69,6 @@ tts = [
     # réclame lui aussi que dans un extra.
     "torchcodec",
 ]
-ocr = ["pytesseract>=0.3.10", "pillow>=10.3"]
 dev = ["pytest>=8.2", "ruff>=0.5", "mypy>=1.10"]
 
 [project.scripts]
