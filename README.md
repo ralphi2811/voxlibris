@@ -131,16 +131,17 @@ coup d'œil où en est chaque livre et ce qui reste à faire.
   suivre : relancer la synthèse — qui refait d'abord la préparation, puis ne repasse au
   moteur que les segments dont le texte a changé —, et réassembler.
 - **Voix** : les moteurs que l'installation offre, avec leur licence, un banc d'essai sur
-  le même extrait, le dépôt d'un extrait à cloner, le coût du livre entier par moteur.
+  le même extrait, le dépôt d'un extrait à cloner, une voix inventée d'après sa description, le coût du livre entier par moteur.
 - **Synthèse** : réglages — moteur, narrateur, voix des dialogues, vitesse —, avancement
   segment par segment, bouton d'arrêt, et le tableau
   des **segments à l'oreille** — instant, cause, le passage autour, écouter, corriger,
   rejouer, valider. Rejouer un segment le recolle dans sa piste sans refaire le
   chapitre ; le valider le garde tel quel, l'oreille ayant le dernier mot.
 - **Assemblage** et **Journal** des tâches.
-- **Réglages** : modèle de langage, Voxtral, ZONOS2, OmniVoice, RapidOCR, licence XTTS, carte
-  graphique — enregistrés dans le dossier des données, pris en compte sans redémarrage,
-  avec un bouton Tester par service. Le `.env` reste la couche de dessous.
+- **Réglages** : modèle de langage, Voxtral, ZONOS2, OmniVoice, RapidOCR, licence XTTS,
+  moteurs proposés, carte graphique — enregistrés dans le dossier des données, pris en
+  compte sans redémarrage, avec un bouton Tester par service. Le `.env` reste la couche
+  de dessous.
 
 L'**atelier** est le processus qui exécute les tâches — le service `worker` sous Compose.
 Il bat toutes les cinq secondes dans `atelier.json` ; l'interface en déduit s'il est là,
@@ -159,6 +160,19 @@ sa carte graphique, ses moteurs, et l'état des serveurs qu'il garde.
 
 Les trois premiers vivent dans l'atelier ; les trois autres sont des serveurs à part,
 sous profil, que l'atelier réveille à la demande.
+
+### N'afficher que ce qu'on utilise
+
+Six moteurs, c'est chargé pour qui n'en écoute qu'un. Dans les Réglages, section
+« Moteurs et matériel », décochez ceux dont vous ne voulez pas : les pages Voix et
+Synthèse ne montrent plus que le reste — tuiles, banc d'essai, choix du moteur, pouls de
+l'atelier. Rien n'est désinstallé, et un livre qui a retenu un moteur écarté le garde,
+signalé comme tel. Tout coché, l'interface propose tout ce que l'atelier sait faire, y
+compris un moteur ajouté plus tard.
+
+Le profil Compose ne dit rien de XTTS, Kokoro et Piper, embarqués dans l'atelier : c'est
+ce réglage qui les écarte. Sans passer par l'interface, `VOXLIBRIS_ENGINES=omnivoice,piper`
+dans le `.env` fait la même chose.
 
 ### Un scan sans texte : RapidOCR
 
@@ -234,6 +248,22 @@ le mandarin et le japonais. Il ne cohabite avec aucun autre serveur sur une cart
 
 Sur les deux, le réglage de vitesse agit, et le contrôle qualité par segment rattrape les
 rares hallucinations que leurs auteurs reconnaissent.
+
+### Inventer une voix : le « voice design » d'OmniVoice
+
+Pas d'extrait sous la main, ou pas le droit d'en cloner un ? OmniVoice sait aussi
+**inventer une voix d'après sa description** : homme ou femme, enfant à personne âgée,
+très grave à très aiguë, chuchotée. Sur la page Voix, la carte « Inventer une voix »
+demande un nom et ces traits ; l'atelier réveille OmniVoice, lui fait lire un court
+passage, **dépose l'extrait dans le dossier des voix**, où il rejoint les voix à cloner,
+puis lui fait lire les premiers segments du livre, **au banc d'essai**, où « Choisir »
+la retient. Si elle ne plaît pas, relancez, le modèle en tire une autre à chaque
+appel — c'est justement pour cela que l'extrait la fixe : la même voix lira ensuite tout
+le livre, chez OmniVoice comme chez ZONOS2, et pour tous les livres.
+
+Ces voix n'appartiennent à personne : aucune question de droit à la voix ne se pose.
+Les accents proposés par le modèle ne valent que pour l'anglais, ses dialectes que pour
+le chinois ; ils ne sont pas offerts.
 
 ### Voxtral, chez Mistral ou chez vous
 
@@ -369,7 +399,7 @@ détaille.
 
 ```bash
 uv sync --group dev          # le cœur, sans PyTorch ni moteur
-uv run pytest -q             # 347 tests, quelques secondes, aucune carte requise
+uv run pytest -q             # 363 tests, quelques secondes, aucune carte requise
 uv run ruff check . && uv run ruff format --check .
 ```
 

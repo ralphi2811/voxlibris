@@ -302,3 +302,100 @@ class TestTache:
         worker.run_ocr(project, queue.enqueue("p", "ocr", force=True), queue)
         assert (project.clean_dir / "ch01.md").read_text(encoding="utf-8").endswith("Relu.\n")
         assert "Nouveau." in (project.raw_dir / "ch01.md").read_text(encoding="utf-8")
+
+
+class TestVoixInventee:
+    """La tâche qui invente une voix chez OmniVoice et la dépose comme extrait."""
+
+    def test_lextrait_rejoint_le_dossier_des_voix(self, tmp_path, monkeypatch):
+        import wave
+
+        import numpy as np
+
+        from voxlibris import worker
+        from voxlibris.config import voices_dir
+        from voxlibris.tts import omnivoice
+        from voxlibris.web.jobs import Queue
+
+        asked: dict = {}
+
+        class FakeOmni:
+            def __init__(self, *a, **k):
+                pass
+
+            def probe(self):
+                return {"ready": True}
+
+            def design(self, text, instruct, language="fr", speed=1.0):
+                asked.update(text=text, instruct=instruct, language=language)
+                return np.full(2400, 0.5, dtype=np.float32), 24000
+
+        monkeypatch.setattr(omnivoice, "Client", FakeOmni)
+        project = TestTache()._project(tmp_path)
+        queue = Queue(tmp_path / "jobs.sqlite")
+        job = queue.enqueue("p", "design", label="vieille-dame", instruct="female, elderly")
+        worker.run_design(project, job, queue)
+
+        target = voices_dir() / "vieille-dame.wav"
+        assert target.exists()
+        with wave.open(str(target)) as saved:
+            assert saved.getframerate() == 24000 and saved.getnframes() == 2400
+        assert asked == {
+            "text": omnivoice.design_text("fr"),
+            "instruct": "female, elderly",
+            "language": "fr",
+        }
+        assert "0.1 s déposées" in queue.get(job.id).log
+        assert "pas encore de segments" in queue.get(job.id).log
+
+    def test_avec_des_segments_la_voix_passe_au_banc(self, tmp_path, monkeypatch):
+        import numpy as np
+        from test_atelier import make_project
+
+        from voxlibris import worker
+        from voxlibris.normalize import build_segments
+        from voxlibris.tts import omnivoice
+        from voxlibris.web.jobs import Queue
+
+        class FakeOmni:
+            def __init__(self, *a, **k):
+                pass
+
+            def probe(self):
+                return {"ready": True}
+
+            def design(self, text, instruct, language="fr", speed=1.0):
+                return np.full(2400, 0.5, dtype=np.float32), 24000
+
+        class FakeEngine:
+            name, voice, speed, sample_rate = "omnivoice", "grand mere", 1.0, 24000
+            supports_speed = True
+            loaded: list = []
+
+            def say(self, text):
+                return np.full(len(text) * 2400, 0.3, np.float32)
+
+        def fake_load(backend, voice, device=None):
+            FakeEngine.loaded.append((backend, voice))
+            return FakeEngine()
+
+        monkeypatch.setattr(omnivoice, "Client", FakeOmni)
+        monkeypatch.setattr("voxlibris.tts.backends.load", fake_load)
+        project = make_project(tmp_path / "p")
+        build_segments(project.text_dir, project.segments_dir)
+        queue = Queue(tmp_path / "jobs.sqlite")
+        job = queue.enqueue("p", "design", label="grand-mere", instruct="female, elderly")
+        worker.run_design(project, job, queue)
+
+        assert FakeEngine.loaded == [("omnivoice", "grand mere")]
+        assert (project.out_dir / "samples" / "omnivoice--grand_mere.wav").exists()
+        assert "échantillons prêts" in queue.get(job.id).log
+
+    def test_sans_nom_ni_trait_la_tache_refuse(self, tmp_path):
+        from voxlibris import worker
+        from voxlibris.web.jobs import Queue
+
+        project = TestTache()._project(tmp_path)
+        queue = Queue(tmp_path / "jobs.sqlite")
+        with pytest.raises(RuntimeError, match="nom"):
+            worker.run_design(project, queue.enqueue("p", "design", label="x"), queue)

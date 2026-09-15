@@ -12,8 +12,7 @@
   {% for key, e in engines.items() %}
   {% set ok = available.get(key) if available else none %}
   {% set sleeping = served and served.get(key, {}).get("state") == "stopped" %}
-  {# Un moteur que l'atelier n'a pas — ni embarqué, ni servi, ni configuré — n'est pas proposé. #}
-  {% if ok is none or ok %}
+  {# Un moteur que l'atelier n'a pas, ou qu'on a écarté dans les Réglages, n'est pas proposé. #}
   <div class="card pad engine {% if project.backend == key %}chosen{% endif %}">
     <div class="row"><strong>{{ e.label }}</strong><span class="spacer"></span>
       {% if ok is none %}<span class="chip muted">{{ e.where }}</span>
@@ -23,8 +22,8 @@
     <span class="muted small">{{ e.blurb }}</span>
     <div class="chips"><span class="chip {{ e.licence_tone }}">{{ e.licence }}</span>{% if key == "voxtral" %}<span class="chip {% if voxtral_local %}ok{% else %}warn{% endif %}">{% if voxtral_local %}servi en local{% else %}API · texte envoyé{% endif %}</span>{% endif %}{% if key in ("zonos2", "omnivoice") %}<span class="chip ok">clonage de voix</span>{% endif %}</div>
   </div>
-  {% endif %}
   {% endfor %}
+  {% if engines|length < all_engines|length %}<span class="muted small full">{{ all_engines|length - engines|length }} moteur{% if all_engines|length - engines|length > 1 %}s{% endif %} non proposé{% if all_engines|length - engines|length > 1 %}s{% endif %} : ce que l'atelier n'a pas, ou ce que vous avez écarté dans les <a href="/settings">Réglages</a>.</span>{% endif %}
 </div>
 
 <div class="cols main-side">
@@ -62,7 +61,7 @@
       </div>
       <div class="field"><span>Une autre voix</span>
         <div class="row">
-          <select class="input" name="extra_backend" id="extra-backend">{% for key, e in engines.items() %}{% if not available or available.get(key) %}<option value="{{ key }}">{{ e.label }}</option>{% endif %}{% endfor %}</select>
+          <select class="input" name="extra_backend" id="extra-backend">{% for key, e in engines.items() %}<option value="{{ key }}">{{ e.label }}</option>{% endfor %}</select>
           <input class="input grow" type="text" name="extra_voice" id="extra-voice" list="voice-options" placeholder="nom de la voix">
           <datalist id="voice-options"></datalist>
         </div>
@@ -79,12 +78,13 @@
     </div>
 
     <form class="card pad stack" method="post" action="/projects/{{ name }}/voices/clone" enctype="multipart/form-data">
-      <div class="row"><strong>Cloner une voix</strong><span class="spacer"></span>{% for k, label in (("zonos2", "ZONOS2"), ("omnivoice", "OmniVoice")) %}{% if available and available.get(k) %}<span class="chip {% if served and served.get(k, {}).get("state") == "stopped" %}warn{% else %}ok{% endif %}">{{ label }}</span>{% endif %}{% endfor %}</div>
+      <div class="row"><strong>Cloner une voix</strong><span class="spacer"></span>{% for k, label in (("zonos2", "ZONOS2"), ("omnivoice", "OmniVoice")) %}{% if k in engines and available and available.get(k) %}<span class="chip {% if served and served.get(k, {}).get("state") == "stopped" %}warn{% else %}ok{% endif %}">{{ label }}</span>{% endif %}{% endfor %}</div>
       {% if cloning == "deposee" %}<span class="chip ok">extrait déposé — la voix est prête</span>{% endif %}
       {% if voice_samples %}
       <div class="stack tight">
         {% for v in voice_samples %}
         <div class="row small"><span>{{ v.label }}</span><span class="muted">{{ v.file }}</span><span class="spacer"></span>
+          <audio controls preload="none" class="voice-audio" src="/voices/{{ v.file }}"></audio>
           <button class="btn sm ghost" type="submit" formaction="/projects/{{ name }}/voices/clone/delete" formnovalidate name="sample" value="{{ v.file }}" title="Retirer cette voix">{{ icons.ic("trash", 13) }}</button></div>
         {% endfor %}
       </div>
@@ -95,14 +95,31 @@
         <input class="input grow" type="text" name="label" placeholder="nom de la voix" maxlength="60">
         <label class="btn file-pick" title="Un fichier audio : wav, mp3, flac, m4a, ogg, opus, aac ou webm"><input type="file" name="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.opus,.aac,.webm" required>{{ icons.ic("upload", 14) }}<span class="file-name">Choisir l'extrait</span></label>
       </div>
-      <span class="muted small">Dix à trente secondes de parole nette, sans musique, dans la langue du livre ; OmniVoice n'en retient que les douze premières. Un extrait dont vous avez le droit de vous servir : cloner quelqu'un sans son accord, c'est non.{% if not (available and (available.get("zonos2") or available.get("omnivoice"))) %} Renseignez l'adresse d'un serveur ZONOS2 ou OmniVoice dans les Réglages pour qu'il s'en serve.{% endif %}</span>
+      <span class="muted small">Dix à trente secondes de parole nette, sans musique, dans la langue du livre ; OmniVoice n'en retient que les douze premières. Un extrait dont vous avez le droit de vous servir : cloner quelqu'un sans son accord, c'est non.{% if not (available and (("zonos2" in engines and available.get("zonos2")) or ("omnivoice" in engines and available.get("omnivoice")))) %} Renseignez l'adresse d'un serveur ZONOS2 ou OmniVoice dans les Réglages pour qu'il s'en serve.{% endif %}</span>
       <button class="btn primary" type="submit">{{ icons.ic("mic", 14) }}Déposer l'extrait</button>
     </form>
+
+    {% if "omnivoice" in engines and available and available.get("omnivoice") %}
+    <form class="card pad stack" method="post" action="/projects/{{ name }}/jobs/design">
+      <div class="row"><strong>Inventer une voix</strong><span class="spacer"></span><span class="chip {% if served and served.get("omnivoice", {}).get("state") == "stopped" %}warn{% else %}ok{% endif %}">OmniVoice</span></div>
+      <span class="muted small">Décrivez-la : OmniVoice en tire une voix qui n'appartient à personne, lit un court passage qui la fixe parmi les voix à cloner ci-dessus, puis les premiers segments du livre, au banc. Elle ne plaît pas ? Relancez, le modèle en invente une autre.</span>
+      <input class="input" type="text" name="label" placeholder="nom de la voix" maxlength="60" required>
+      <div class="row">
+        {% for trait, options in design_traits.items() %}
+        <select class="input grow" name="{{ trait }}" title="{{ trait }}">
+          <option value="">{{ {"gender": "homme / femme", "age": "âge", "pitch": "hauteur", "style": "style"}[trait] }}</option>
+          {% for value, label in options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+        {% endfor %}
+      </div>
+      <button class="btn primary" type="submit" {% if job %}disabled{% endif %}>{{ icons.ic("mic", 14) }}Inventer et mettre au banc</button>
+    </form>
+    {% endif %}
 
     <form class="card pad stack" method="post" action="/projects/{{ name }}/voice">
       <strong>Ou saisir directement</strong>
       <div class="row">
-        <select class="input" name="backend" id="direct-backend">{% for key, e in engines.items() %}{% if not available or available.get(key) or project.backend == key %}<option value="{{ key }}" {% if project.backend == key %}selected{% endif %}>{{ e.label }}</option>{% endif %}{% endfor %}</select>
+        <select class="input" name="backend" id="direct-backend">{% for key, e in engines.items() %}<option value="{{ key }}" {% if project.backend == key %}selected{% endif %}>{{ e.label }}</option>{% endfor %}{% if project.backend and project.backend not in engines %}<option value="{{ project.backend }}" selected>{{ all_engines[project.backend].label if project.backend in all_engines else project.backend }} · écarté</option>{% endif %}</select>
         <input class="input grow" type="text" name="voice" id="direct-voice" list="voice-options-direct" value="{{ project.voice or '' }}" placeholder="voix">
         <datalist id="voice-options-direct"></datalist>
       </div>

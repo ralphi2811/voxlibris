@@ -177,3 +177,30 @@ class TestInjoignable:
         monkeypatch.setattr(omnivoice, "in_container", lambda: True)
         assert "host.docker.internal:1920" in omnivoice.unreachable_hint("http://localhost:1920")
         assert omnivoice.unreachable_hint("http://omnivoice:1920") == ""
+
+
+class TestVoixInventee:
+    """La voix inventée d'après sa description : requête, décodage, vocabulaire."""
+
+    def test_la_description_part_avec_le_texte_et_la_langue(self):
+        client = FakeClient({"/design": (make_pcm(0.5), {"x-audio-sample-rate": "24000"})})
+        audio, rate = client.design("Bonjour.", "female, elderly", "fr")
+        assert client.calls == [
+            ("/design", {"text": "Bonjour.", "instruct": "female, elderly", "language": "fr"})
+        ]
+        assert rate == 24000 and len(audio) == 12000
+
+    def test_les_traits_choisis_forment_la_description(self):
+        assert omnivoice.design_instruct({"gender": "female", "age": "", "pitch": "low pitch"}) == (
+            "female, low pitch"
+        )
+        assert omnivoice.design_instruct({}) == ""
+        with pytest.raises(ValueError, match="inconnu"):
+            omnivoice.design_instruct({"gender": "robot"})
+
+    def test_la_description_se_lit_en_clair(self):
+        assert omnivoice.describe_instruct("female, elderly, low pitch") == "femme, âgé, grave"
+
+    def test_un_texte_par_langue_le_francais_par_defaut(self):
+        assert omnivoice.design_text("en").startswith("Evening")
+        assert omnivoice.design_text("xx") == omnivoice.design_text("fr")

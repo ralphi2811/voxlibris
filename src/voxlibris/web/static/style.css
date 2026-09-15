@@ -105,6 +105,7 @@ a.chip { text-decoration: none; } a.chip:hover { filter: brightness(1.15); }
 .row { display: flex; align-items: center; gap: 10px; }
 .row.end { justify-content: flex-end; } .row.small { font-size: 13px; }
 .row .grow, .grow { flex: 1; min-width: 0; }
+.row.wrap { flex-wrap: wrap; row-gap: 6px; } .engine-picks .check { margin-right: 6px; }
 .cols { display: grid; gap: 24px; }
 .cols.main-side { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
 .grid { display: grid; gap: 16px; }
@@ -273,3 +274,5 @@ tr.context mark { background: var(--warn-soft); color: var(--ink); padding: 0 3p
 .cast-p.dialogue { --band: var(--info); }
 .cast-p.dialogue .who { font-style: italic; }
 .cast-mark { padding: 2px 16px 2px 12px; font: 600 11px/2 var(--mono); color: var(--band, var(--ink2)); border-left: 4px solid var(--band, transparent); opacity: .8; }
+
+.voice-audio { height: 28px; max-width: 200px; }

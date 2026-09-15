@@ -10,9 +10,13 @@
 </div>
 {% if atelier.busy %}<div class="atelier-line accent">{{ icons.ic("clock", 14) }}tâche {{ atelier.busy }} en cours</div>{% endif %}
 <div class="chips">
+  {% set chosen = chosen_engines() %}
   {% for engine, ok in atelier.engines.items() %}
+  {# Un moteur écarté dans les Réglages ne s'affiche pas : la lecture des scans, elle, n'est pas un moteur. #}
+  {% if not chosen or engine in chosen or engine == "rapidocr" %}
   {% set st = atelier.served.get(engine, {}).get("state") if atelier.served else none %}
   <span class="chip {% if st == "stopped" %}warn{% elif ok %}ok{% else %}muted{% endif %}">{{ engine }}{% if st == "stopped" %} · veille{% endif %}</span>
+  {% endif %}
   {% endfor %}
 </div>
 {% if atelier.release_in_s %}<div class="atelier-line">{{ icons.ic("clock", 14) }}carte rendue dans {{ (atelier.release_in_s / 60) | round | int }} min sans tâche</div>{% endif %}

@@ -58,6 +58,11 @@
     <input type="hidden" name="COQUI_TOS_AGREED__present" value="1">
     <label class="toggle-row"><input type="checkbox" name="COQUI_TOS_AGREED" {% if settings["COQUI_TOS_AGREED"].value == "1" %}checked{% endif %}><span class="toggle"></span>
       <span><strong>XTTS-v2 — j'accepte la licence CPML</strong><br><span class="muted small">Usage non commercial. Rien n'est téléchargé tant que ce n'est pas coché. <a href="https://coqui.ai/cpml" rel="noopener">Lire la licence</a>.</span></span></label>
+    <input type="hidden" name="VOXLIBRIS_ENGINES__present" value="1">
+    <div class="field"><span>Moteurs proposés <em class="origin">{{ settings["VOXLIBRIS_ENGINES"].origin }}</em></span>
+      <div class="row wrap engine-picks">{% for key, e in engines.items() %}{% set has = atelier.engines.get(key) if atelier.online and atelier.engines else none %}<label class="check" title="{{ e.blurb }}"><input type="checkbox" name="VOXLIBRIS_ENGINES" value="{{ key }}" {% if not chosen or key in chosen %}checked{% endif %}><span>{{ e.label }}{% if has is sameas false %} <span class="muted">· absent</span>{% endif %}</span></label>{% endfor %}</div>
+      <span class="muted small">Décochez ce que vous n'utilisez pas : les pages Voix et Synthèse ne montrent que le reste. Tout coché, l'interface propose tout ce que l'atelier sait faire. Un livre qui a retenu un moteur écarté le garde.</span>
+    </div>
     <label class="field"><span>Matériel par défaut <em class="origin">{{ settings["VOXLIBRIS_DEVICE"].origin }}</em></span>
       <select class="input" name="VOXLIBRIS_DEVICE">
         <option value="" {% if not settings["VOXLIBRIS_DEVICE"].value %}selected{% endif %}>Carte graphique si présente</option>

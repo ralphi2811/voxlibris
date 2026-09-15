@@ -699,6 +699,110 @@ class TestConcierge:
         assert "atelier" in client.get("/jobs").text
 
 
+class TestMoteursEcartes:
+    """Le réglage VOXLIBRIS_ENGINES allège l'interface : elle ne propose que les moteurs
+    retenus, partout, sans rien retirer à un livre qui en a déjà choisi un autre."""
+
+    def _pulse(self, monkeypatch):
+        from voxlibris import atelier
+
+        pulse = {
+            "online": True,
+            "age": 1,
+            "busy": None,
+            "device": "cuda",
+            "gpu": "RTX",
+            "docker": True,
+            "served": {"omnivoice": {"state": "running", "name": "voxlibris-omnivoice-1"}},
+            "idle_minutes": 15,
+            "engines": {
+                "xtts": True,
+                "kokoro": True,
+                "piper": True,
+                "voxtral": False,
+                "zonos2": False,
+                "omnivoice": True,
+                "rapidocr": False,
+            },
+        }
+        monkeypatch.setattr(atelier, "status", lambda root: pulse)
+
+    def _quiet(self, monkeypatch):
+        from voxlibris.web import app as app_module
+
+        monkeypatch.setattr(app_module, "served_state", lambda e: "")
+        monkeypatch.setattr(app_module, "voxtral_voices", lambda language="": [])
+        monkeypatch.setattr(app_module, "zonos2_voices", lambda: [])
+        monkeypatch.setattr(app_module, "omnivoice_voices", lambda: ["jeannot"])
+
+    def test_le_reglage_se_lit_et_secrit_depuis_les_reglages(self, client):
+        from voxlibris import config
+
+        page = client.get("/settings").text
+        assert 'name="VOXLIBRIS_ENGINES" value="omnivoice" checked' in page
+        client.post(
+            "/settings",
+            data={"VOXLIBRIS_ENGINES__present": "1", "VOXLIBRIS_ENGINES": ["omnivoice", "piper"]},
+        )
+        assert config.read_settings()["VOXLIBRIS_ENGINES"] == "omnivoice,piper"
+        assert config.chosen_engines() == frozenset({"omnivoice", "piper"})
+        page = client.get("/settings").text
+        assert 'value="piper" checked' in page and 'value="xtts" checked' not in page
+        # Tout recocher rend au réglage son sens de départ : tout ce que l'atelier a.
+        client.post(
+            "/settings",
+            data={
+                "VOXLIBRIS_ENGINES__present": "1",
+                "VOXLIBRIS_ENGINES": ["xtts", "kokoro", "piper", "voxtral", "zonos2", "omnivoice"],
+            },
+        )
+        assert "VOXLIBRIS_ENGINES" not in config.read_settings()
+        assert config.chosen_engines() is None
+
+    def test_la_page_voix_ne_montre_que_les_moteurs_retenus(self, client, make_epub, monkeypatch):
+        from voxlibris import config
+
+        name = TestRelecture._create(None, client, make_epub)
+        self._pulse(monkeypatch)
+        self._quiet(monkeypatch)
+        config.write_settings({"VOXLIBRIS_ENGINES": "omnivoice"})
+        page = client.get(f"/projects/{name}/voices").text
+        # Ni tuile, ni ligne au banc, ni option : XTTS et Kokoro sont écartés, OmniVoice reste.
+        assert "OmniVoice · jeannot" in page and "Inventer une voix" in page
+        assert "XTTS · Viktor" not in page and "Kokoro-82M" not in page and "Piper" not in page
+        assert 'value="xtts"' not in page and 'value="kokoro"' not in page
+        assert "5 moteurs non proposés" in page
+        # Le pouls de la barre latérale suit le même réglage.
+        side = client.get("/partials/atelier").text
+        assert "omnivoice" in side and "kokoro" not in side
+
+    def test_la_synthese_part_du_premier_moteur_retenu(self, client, make_epub, monkeypatch):
+        from voxlibris import config
+        from voxlibris.web import app as app_module
+
+        name = TestRelecture._create(None, client, make_epub)
+        self._pulse(monkeypatch)
+        self._quiet(monkeypatch)
+        config.write_settings({"VOXLIBRIS_ENGINES": "piper, omnivoice"})
+        page = client.get(f"/projects/{name}/synth").text
+        assert 'value="piper" checked' in page and 'value="xtts"' not in page
+        client.post(f"/projects/{name}/jobs/synth", data={})
+        assert app_module.queue.active(name).params["backend"] == "piper"
+
+    def test_un_livre_garde_le_moteur_quil_a_retenu(self, client, make_epub, monkeypatch):
+        from voxlibris import config
+
+        name = TestRelecture._create(None, client, make_epub)
+        self._pulse(monkeypatch)
+        self._quiet(monkeypatch)
+        client.post(f"/projects/{name}/voice", data={"backend": "kokoro", "voice": "ff_siwis"})
+        config.write_settings({"VOXLIBRIS_ENGINES": "omnivoice"})
+        synth = client.get(f"/projects/{name}/synth").text
+        assert 'value="kokoro" checked' in synth and "Kokoro · écarté" in synth
+        voices = client.get(f"/projects/{name}/voices").text
+        assert '<option value="kokoro" selected>Kokoro-82M · écarté</option>' in voices
+
+
 class TestPagesDOrigine:
     """Un EPUB paginé montre ses pages en regard du texte, dans un cadre isolé."""
 
@@ -913,3 +1017,87 @@ class TestScan:
         )
         job = app_module.queue.active("une-histoire")
         assert job.kind == "ocr" and job.params == {"force": True}
+
+
+class TestVoixInventee:
+    def test_la_demande_devient_une_tache(self, client, make_epub):
+        path = make_epub(["Le départ"])
+        with path.open("rb") as handle:
+            client.post("/projects", files={"file": (path.name, handle)})
+        from voxlibris.web import app as app_module
+
+        (name,) = [
+            d.name for d in app_module.workspace().iterdir() if (d / "project.json").exists()
+        ]
+        response = client.post(
+            f"/projects/{name}/jobs/design",
+            data={"label": "Vieille dame", "gender": "female", "age": "elderly", "pitch": ""},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303 and response.headers["location"].endswith("/voices")
+        job = app_module.queue.active(name)
+        assert job.kind == "design"
+        assert job.params == {"label": "vieille-dame", "instruct": "female, elderly"}
+
+    def test_sans_trait_ni_nom_rien_ne_part(self, client, make_epub):
+        path = make_epub(["Le départ"])
+        with path.open("rb") as handle:
+            client.post("/projects", files={"file": (path.name, handle)})
+        from voxlibris.web import app as app_module
+
+        (name,) = [
+            d.name for d in app_module.workspace().iterdir() if (d / "project.json").exists()
+        ]
+        assert client.post(f"/projects/{name}/jobs/design", data={"label": "x"}).status_code == 400
+        assert (
+            client.post(f"/projects/{name}/jobs/design", data={"gender": "male"}).status_code == 400
+        )
+        assert app_module.queue.active(name) is None
+
+    def test_un_extrait_de_voix_secoute(self, client, monkeypatch):
+        from voxlibris.config import voices_dir
+
+        folder = voices_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "marie.wav").write_bytes(b"RIFF")
+        assert client.get("/voices/marie.wav").status_code == 200
+        assert client.get("/voices/absente.wav").status_code == 404
+        assert client.get("/voices/..%2Fsettings.json").status_code == 404
+
+
+class TestCatalogueDesCloneurs:
+    def test_toutes_les_voix_deposees_sont_proposees_au_banc(self, client):
+        from voxlibris.web import app as app_module
+
+        known = {
+            "omnivoice": [f"voix {i}" for i in range(7)],
+            "voxtral": [f"fr_{i}" for i in range(9)],
+        }
+        rows = app_module.sample_candidates("fr", None, known)
+        assert [v for b, v, _, _ in rows if b == "omnivoice"] == known["omnivoice"]
+        assert len([v for b, v, _, _ in rows if b == "voxtral"]) == app_module.PER_BACKEND
+
+    def test_une_voix_deposee_par_latelier_parait_sans_attendre(self, client, monkeypatch):
+        import os
+        import time
+
+        from voxlibris.config import voices_dir
+        from voxlibris.web import app as app_module
+
+        folder = voices_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        calls: list[str] = []
+
+        def fake_fetch(engine, language):
+            calls.append(engine)
+            return [p.stem for p in folder.iterdir()] if engine == "omnivoice" else []
+
+        monkeypatch.setattr(app_module, "_fetch", fake_fetch)
+        app_module.forget_catalogues()
+        assert app_module.remote_catalogues("fr")["omnivoice"] == []
+        assert app_module.remote_catalogues("fr")["omnivoice"] == []
+        assert calls.count("omnivoice") == 1  # dans le délai, rien n'est redemandé
+        (folder / "jeannot.wav").write_bytes(b"RIFF")
+        os.utime(folder, (time.time() + 5, time.time() + 5))
+        assert app_module.remote_catalogues("fr")["omnivoice"] == ["jeannot"]
+        assert calls.count("omnivoice") == 2 and calls.count("voxtral") == 1

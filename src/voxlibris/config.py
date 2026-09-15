@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 _loaded = False
@@ -37,6 +38,7 @@ EDITABLE = (
     "VOXLIBRIS_OMNIVOICE_BASE_URL",
     "VOXLIBRIS_RAPIDOCR_BASE_URL",
     "COQUI_TOS_AGREED",
+    "VOXLIBRIS_ENGINES",
     "VOXLIBRIS_DEVICE",
     "VOXLIBRIS_GPU_IDLE_MIN",
 )
@@ -112,6 +114,16 @@ def setting(name: str, default: str = "") -> str:
     if (value := read_settings().get(name)) is not None:
         return value
     return os.environ.get(name, default)
+
+
+def chosen_engines() -> frozenset[str] | None:
+    """Les moteurs que l'interface propose, d'après `VOXLIBRIS_ENGINES` : des noms séparés
+    par des virgules ou des espaces. Vide, c'est tout ce que l'atelier a. Le réglage ne
+    désinstalle rien : il allège l'interface, une fois choisi ce qu'on veut entendre.
+    """
+    raw = setting("VOXLIBRIS_ENGINES").strip().lower()
+    names = frozenset(n for n in re.split(r"[,\s]+", raw) if n)
+    return names or None
 
 
 def origin(name: str) -> str:

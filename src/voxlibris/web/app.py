@@ -29,12 +29,21 @@ from fastapi.templating import Jinja2Templates
 
 from .. import atelier, pages
 from ..concierge import served_state
-from ..config import EDITABLE, SECRETS, origin, setting, voices_dir, write_settings
+from ..config import (
+    EDITABLE,
+    SECRETS,
+    chosen_engines,
+    origin,
+    setting,
+    voices_dir,
+    write_settings,
+)
 from ..document import Chapter, Document
 from ..ingest import Kind, NeedsOCR
 from ..ingest import ingest as ingest_book
 from ..project import Project
 from ..tts.backends import BACKENDS, SPEED_RANGE
+from ..tts.omnivoice import DESIGN_TRAITS
 from .jobs import State, default_queue, workspace
 
 BASE = Path(__file__).parent
@@ -115,6 +124,30 @@ XTTS_SUGGESTIONS = ("Viktor Menelaos", "Damien Black", "Tammie Ema")
 # pas à l'oreille, et chacun se paie chez Voxtral.
 PER_BACKEND = 4
 
+
+def active_engines(available: dict[str, bool] | None = None) -> dict[str, dict[str, str]]:
+    """Les moteurs que l'interface propose : ceux que l'atelier a — tous, tant qu'il n'a
+    pas battu — moins ceux écartés dans les Réglages. Une seule liste pour toutes les
+    pages : tuiles, banc d'essai, choix du moteur de synthèse. Un projet qui a retenu un
+    moteur écarté le garde ; les gabarits l'ajoutent, signalé comme tel.
+    """
+    wanted = chosen_engines()
+    return {
+        key: engine
+        for key, engine in ENGINES.items()
+        if (not available or available.get(key)) and (wanted is None or key in wanted)
+    }
+
+
+def default_backend(project: Project | None, active: dict[str, object]) -> str:
+    """Le moteur retenu par le projet, sinon le premier proposé — XTTS quand il l'est."""
+    if project is not None and project.backend:
+        return project.backend
+    if "xtts" in active or not active:
+        return "xtts"
+    return next(iter(active))
+
+
 # Page où l'on atterrit après une tâche, selon sa nature.
 LANDING = {
     "ocr": "",
@@ -122,6 +155,7 @@ LANDING = {
     "proofread": "review/1",
     "personas": "review/1",
     "sample": "voices",
+    "design": "voices",
     "synth": "synth",
     "resynth": "synth",
     "assemble": "assemble",
@@ -196,11 +230,21 @@ CATALOGUE_TTL = 30.0
 # Un serveur qui met plus de trois secondes à lister ses voix est tenu pour absent : la
 # page ne l'attend pas. La synthèse, elle, garde son propre délai, bien plus long.
 PROBE_TIMEOUT = 3.0
-_catalogue_cache: dict[tuple[str, str], tuple[float, list[str]]] = {}
+_catalogue_cache: dict[tuple[str, str], tuple[float, list[str], float]] = {}
 # Les sondes partent ensemble, dans des fils : la page attend le plus lent, pas la somme,
 # et pas au-delà du délai — une résolution de nom qui traîne finit seule, dans son fil.
 _probes = ThreadPoolExecutor(max_workers=3, thread_name_prefix="catalogue")
 REMOTE_ENGINES = ("voxtral", "zonos2", "omnivoice")
+CLONERS = ("zonos2", "omnivoice")
+
+
+def voices_stamp() -> float:
+    """Ce que dit le dossier des voix de sa dernière modification : une voix déposée par
+    l'atelier — inventée, par exemple — doit paraître sans attendre la fin du délai."""
+    try:
+        return voices_dir().stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def _fetch(engine: str, language: str) -> list[str]:
@@ -213,14 +257,20 @@ def _fetch(engine: str, language: str) -> list[str]:
     return {"zonos2": zonos2_voices, "omnivoice": omnivoice_voices}[engine]()
 
 
-def remote_catalogues(language: str = "") -> dict[str, list[str]]:
+def remote_catalogues(
+    language: str = "", engines: tuple[str, ...] = REMOTE_ENGINES
+) -> dict[str, list[str]]:
     """Les catalogues servis par une adresse, mémorisés le temps d'une visite."""
     now = time.monotonic()
+    stamp = voices_stamp()
     found: dict[str, list[str]] = {}
     pending: dict[str, Future] = {}
-    for engine in REMOTE_ENGINES:
+    for engine in engines:
         hit = _catalogue_cache.get((engine, language))
-        if hit and now - hit[0] < CATALOGUE_TTL:
+        fresh = hit is not None and now - hit[0] < CATALOGUE_TTL
+        if fresh and engine in CLONERS and hit[2] != stamp:
+            fresh = False
+        if fresh:
             found[engine] = hit[1]
         else:
             pending[engine] = _probes.submit(_fetch, engine, language)
@@ -230,7 +280,7 @@ def remote_catalogues(language: str = "") -> dict[str, list[str]]:
             names = future.result(timeout=max(0.0, deadline - time.monotonic()))
         except Exception:  # serveur absent, trop lent, ou clé manquante : liste vide
             names = []
-        _catalogue_cache[(engine, language)] = (now, names)
+        _catalogue_cache[(engine, language)] = (now, names, stamp)
         found[engine] = names
     return found
 
@@ -245,7 +295,7 @@ def forget_catalogues() -> None:
     _catalogue_cache.clear()
 
 
-def catalogues(language: str = "") -> dict[str, list[str]]:
+def catalogues(language: str = "", active: dict[str, object] | None = None) -> dict[str, list[str]]:
     """Voix proposables sans charger le moindre modèle, par moteur.
 
     XTTS n'en fournit aucune : ses locuteurs ne se lisent qu'une fois les huit
@@ -258,7 +308,9 @@ def catalogues(language: str = "") -> dict[str, list[str]]:
     """
     known = {name: list(cls.catalogue) for name, cls in BACKENDS.items()}
     known["xtts"] = list(XTTS_SUGGESTIONS)
-    known.update(remote_catalogues(language))
+    # Un moteur écarté ne se sonde pas : sa liste n'a nulle part où paraître.
+    wanted = tuple(e for e in REMOTE_ENGINES if active is None or e in active)
+    known.update(remote_catalogues(language, wanted))
     return known
 
 
@@ -332,7 +384,10 @@ def voxtral_is_local() -> bool:
 
 
 def sample_candidates(
-    language: str = "", project: Project | None = None, known: dict[str, list[str]] | None = None
+    language: str = "",
+    project: Project | None = None,
+    known: dict[str, list[str]] | None = None,
+    active: dict[str, object] | None = None,
 ) -> list[tuple[str, str, str, bool]]:
     """Voix à proposer au banc d'essai : (moteur, voix, intitulé, cochée d'avance).
 
@@ -344,14 +399,19 @@ def sample_candidates(
     done = (
         set() if project is None else {(s["backend"], s["voice_raw"]) for s in samples_of(project)}
     )
-    rows: list[tuple[str, str, str, bool]] = [
-        ("xtts", voice, f"XTTS · {voice}", fresh and index < 2 and ("xtts", voice) not in done)
-        for index, voice in enumerate(XTTS_SUGGESTIONS)
-    ]
-    for backend, voices in (known or catalogues(language)).items():
-        if backend == "xtts":
+    rows: list[tuple[str, str, str, bool]] = []
+    if active is None or "xtts" in active:
+        rows = [
+            ("xtts", voice, f"XTTS · {voice}", fresh and index < 2 and ("xtts", voice) not in done)
+            for index, voice in enumerate(XTTS_SUGGESTIONS)
+        ]
+    for backend, voices in (known or catalogues(language, active)).items():
+        if backend == "xtts" or (active is not None and backend not in active):
             continue
-        for voice in voices[:PER_BACKEND]:
+        # Les voix d'un cloneur sont celles que vous avez déposées ou inventées : toutes
+        # sont proposées. Les catalogues fournis avec un moteur, eux, sont écrémés.
+        shown = voices if backend in CLONERS else voices[:PER_BACKEND]
+        for voice in shown:
             rows.append((backend, voice, f"{ENGINES[backend]['label']} · {voice}", False))
     return rows
 
@@ -481,6 +541,9 @@ def shell(request: Request, template: str, name: str | None = None, active: str 
 def atelier_fragment(request: Request):
     """État de l'atelier, relu par la barre latérale toutes les dix secondes."""
     return render(request, "partials/atelier.html", atelier=atelier.status(workspace()))
+
+
+templates.env.globals["chosen_engines"] = chosen_engines
 
 
 # --- Bibliothèque -------------------------------------------------------------------
@@ -920,20 +983,23 @@ def voices_page(request: Request, name: str, cloning: str = ""):
     project = load_project(name)
     pulse = atelier.status(workspace())
     available = pulse.get("engines") or {}
-    known = catalogues(project.language)
+    active = active_engines(available)
+    known = catalogues(project.language, active)
     return shell(
         request,
         "project/voices.html",
         name,
         "voices",
-        engines=ENGINES,
+        engines=active,
+        all_engines=ENGINES,
         available=available,
         served=pulse.get("served") or {},
         catalogues=known,
-        candidates=sample_candidates(project.language, project, known),
+        candidates=sample_candidates(project.language, project, known, active),
         samples=samples_of(project),
         voxtral_local=voxtral_is_local(),
         voice_samples=voice_samples(),
+        design_traits=DESIGN_TRAITS,
         cloning=cloning,
         status=project.status(),
         characters=sum(len(t) for t in project.chapter_texts().values()),
@@ -965,6 +1031,15 @@ async def upload_voice(name: str, file: UploadFile, label: str = Form("")):
         shutil.copyfileobj(file.file, target)
     forget_catalogues()
     return RedirectResponse(f"/projects/{name}/voices?cloning=deposee", status_code=303)
+
+
+@app.get("/voices/{file}")
+def voice_sample(file: str):
+    """Un extrait de voix, pour l'écouter dans la page — le dossier est commun aux livres."""
+    target = voices_dir() / Path(file).name
+    if not target.is_file():
+        raise HTTPException(404, "Extrait introuvable")
+    return FileResponse(target, filename=target.name, content_disposition_type="inline")
 
 
 @app.post("/projects/{name}/voices/clone/delete")
@@ -1046,6 +1121,7 @@ def synth_page(request: Request, name: str, chapter: int = 0, cause: str = ""):
         flagged = [f for f in flagged if f.get("cause") == cause]
     if chapter:
         flagged = [f for f in flagged if f["chapter"] == chapter]
+    active = active_engines(atelier.status(workspace()).get("engines") or {})
     return shell(
         request,
         "project/synth.html",
@@ -1059,8 +1135,10 @@ def synth_page(request: Request, name: str, chapter: int = 0, cause: str = ""):
         approved_count=len(approved),
         approved_label=APPROVED,
         status=project.status(),
-        engines=ENGINES,
-        catalogues=catalogues(project.language),
+        engines=active,
+        all_engines=ENGINES,
+        default_backend=default_backend(project, active),
+        catalogues=catalogues(project.language, active),
         supports_speed={
             k: (voxtral_is_local() if k == "voxtral" else cls.supports_speed)
             for k, cls in BACKENDS.items()
@@ -1144,7 +1222,7 @@ async def enqueue_job(request: Request, name: str, kind: str):
         project.voices = read_cast(form)
         project.save()
         params = {
-            "backend": str(form.get("backend") or project.backend or "xtts"),
+            "backend": str(form.get("backend") or default_backend(project, active_engines())),
             "voice": str(form.get("voice") or "") or None,
             "force": bool(form.get("force")),
             "speed": _number(form.get("speed"), *SPEED_RANGE),
@@ -1161,7 +1239,8 @@ async def enqueue_job(request: Request, name: str, kind: str):
     elif kind == "sample":
         picks = [str(v) for v in form.getlist("voice")]
         if extra := str(form.get("extra_voice") or "").strip():
-            picks.append(f"{form.get('extra_backend', 'xtts')}/{extra}")
+            fallback = default_backend(None, active_engines())
+            picks.append(f"{form.get('extra_backend') or fallback}/{extra}")
         params = {
             "voices": [
                 {"backend": b, "voice": v} for b, _, v in (pick.partition("/") for pick in picks)
@@ -1171,6 +1250,21 @@ async def enqueue_job(request: Request, name: str, kind: str):
         params = {"skip_mp3": not form.get("mp3")}
     elif kind == "ocr":
         params = {"force": bool(form.get("force"))}
+    elif kind == "design":
+        from ..tts.omnivoice import DESIGN_TRAITS, design_instruct
+
+        label = slug(str(form.get("label") or ""))
+        if label == "livre":
+            raise HTTPException(400, "Donnez un nom à la voix.")
+        try:
+            instruct = design_instruct({t: str(form.get(t) or "") for t in DESIGN_TRAITS})
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        if not instruct:
+            raise HTTPException(400, "Choisissez au moins un trait : homme ou femme, âge, hauteur.")
+        params = {"label": label, "instruct": instruct}
+        if text := str(form.get("text") or "").strip():
+            params["text"] = text[:600]
     elif kind not in ("proofread", "personas"):
         raise HTTPException(404, "Tâche inconnue")
 
@@ -1266,6 +1360,8 @@ def settings_page(request: Request, saved: int = 0, released: int = 0):
         request,
         "settings.html",
         settings=settings_view(),
+        engines=ENGINES,
+        chosen=chosen_engines(),
         saved=bool(saved),
         released=bool(released),
         data_dir=str(workspace()),
@@ -1291,6 +1387,11 @@ async def save_settings(request: Request):
             values[flag] = (
                 on if form.get(flag) else ("0" if flag == "VOXLIBRIS_LLM_ENABLED" else "")
             )
+    if "VOXLIBRIS_ENGINES__present" in form:
+        picked = [str(v) for v in form.getlist("VOXLIBRIS_ENGINES") if str(v) in ENGINES]
+        # Tout coché — ou rien — vaut « tout ce que l'atelier a » : un moteur ajouté plus
+        # tard paraîtra de lui-même, au lieu de rester derrière une liste figée.
+        values["VOXLIBRIS_ENGINES"] = "" if len(picked) >= len(ENGINES) else ",".join(picked)
     write_settings(values)
     return RedirectResponse("/settings?saved=1", status_code=303)
 

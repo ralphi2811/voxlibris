@@ -9,6 +9,9 @@ est `src/voxlibris/tts/omnivoice.py`.
     GET  /voices   les voix : un fichier audio du dossier des voix = une voix
     POST /speak    {text, voice, language?, speed?} → PCM flottant 32 bits mono,
                    fréquence dans l'en-tête X-Audio-Sample-Rate
+    POST /design   {text, instruct, language?, speed?} → même PCM, mais la voix est
+                   inventée d'après la description (« female, elderly, low pitch »)
+                   plutôt que clonée ; chaque appel tire une voix nouvelle
 
 Une voix se prépare une fois : l'extrait est coupé à une douzaine de secondes au
 silence le plus net (au-delà, le modèle clone moins bien et va moins vite), transcrit
@@ -223,6 +226,28 @@ class SpeakRequest(BaseModel):
     num_step: int | None = Field(default=None, ge=4, le=64)
 
 
+class DesignRequest(BaseModel):
+    text: str = Field(min_length=1)
+    # Étiquettes du modèle, séparées par des virgules : male/female, child/teenager/young
+    # adult/middle-aged/elderly, very low/low/moderate/high/very high pitch, whisper.
+    instruct: str = Field(min_length=1)
+    language: str | None = None
+    speed: float = Field(default=1.0, gt=0.25, lt=4.0)
+    num_step: int | None = Field(default=None, ge=4, le=64)
+
+
+def pcm_response(audio: np.ndarray) -> Response:
+    seconds = len(audio) / state.sample_rate
+    return Response(
+        content=audio.astype("<f4").tobytes(),
+        media_type="application/octet-stream",
+        headers={
+            "X-Audio-Sample-Rate": str(state.sample_rate),
+            "X-Audio-Seconds": f"{seconds:.2f}",
+        },
+    )
+
+
 def vram() -> dict[str, float]:
     """Ce que le serveur tient sur la carte, en Go : alloué, et réservé par PyTorch."""
     import torch
@@ -245,6 +270,7 @@ def health() -> dict:
         "sample_rate": state.sample_rate,
         "voices": len(scan()),
         "max_reference_s": MAX_REFERENCE_S,
+        "design": True,
         **vram(),
     }
 
@@ -284,21 +310,47 @@ def speak(request: SpeakRequest) -> Response:
             raise HTTPException(400, str(error)) from error
         free_cache()
     audio = np.asarray(audios[0], dtype=np.float32).reshape(-1)
-    seconds = len(audio) / state.sample_rate
     log.info(
         "%d caractères → %.1f s d'audio en %.1f s",
         len(request.text),
-        seconds,
+        len(audio) / state.sample_rate,
         time.monotonic() - started,
     )
-    return Response(
-        content=audio.astype("<f4").tobytes(),
-        media_type="application/octet-stream",
-        headers={
-            "X-Audio-Sample-Rate": str(state.sample_rate),
-            "X-Audio-Seconds": f"{seconds:.2f}",
-        },
+    return pcm_response(audio)
+
+
+@app.post("/design")
+def design(request: DesignRequest) -> Response:
+    """Une voix inventée d'après sa description, lisant le texte : de quoi l'entendre,
+    puis la garder comme extrait à cloner si elle plaît — le modèle en tire une autre à
+    chaque appel."""
+    if state.model is None:
+        raise HTTPException(503, "Modèle en cours de chargement.")
+    language = (request.language or "").strip().lower()[:2] or None
+    if language and language not in state.model.supported_language_ids():
+        language = None
+    with state.lock:
+        started = time.monotonic()
+        try:
+            audios = state.model.generate(
+                text=request.text,
+                language=language,
+                instruct=request.instruct,
+                speed=request.speed if request.speed != 1.0 else None,
+                num_step=request.num_step or NUM_STEP,
+            )
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        free_cache()
+    audio = np.asarray(audios[0], dtype=np.float32).reshape(-1)
+    log.info(
+        "voix « %s » : %d caractères → %.1f s d'audio en %.1f s",
+        request.instruct,
+        len(request.text),
+        len(audio) / state.sample_rate,
+        time.monotonic() - started,
     )
+    return pcm_response(audio)
 
 
 if __name__ == "__main__":

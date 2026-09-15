@@ -533,12 +533,23 @@ def run_ocr(project: Project, job: Job, queue: Queue) -> None:
 
 def run_sample(project: Project, job: Job, queue: Queue) -> None:
     """Synthétise un même extrait avec plusieurs voix, pour choisir à l'oreille."""
+    bench(project, job, queue, job.params.get("voices", []), int(job.params.get("segments", 8)))
+
+
+def bench(
+    project: Project,
+    job: Job,
+    queue: Queue,
+    choices: list[dict],
+    count: int = 8,
+    start: float = 0.0,
+) -> None:
+    """Le banc d'essai : les premiers segments du livre, lus par chaque voix demandée.
+    La progression rapportée va de `start` à 1."""
     from .tts.backends import load
     from .tts.quality import QualityProfile
     from .tts.synth import load_segments, synthesize_chapter
 
-    choices: list[dict] = job.params.get("voices", [])
-    count = int(job.params.get("segments", 8))
     paths = sorted(project.segments_dir.glob("ch*.jsonl"))
     if not paths:
         raise RuntimeError("Aucun segment : lancer la normalisation d'abord.")
@@ -565,7 +576,7 @@ def run_sample(project: Project, job: Job, queue: Queue) -> None:
         if queue.cancel_requested(job.id):
             raise Cancelled()
         backend, voice = choice["backend"], choice.get("voice")
-        queue.report(job.id, index / len(choices), f"{backend} / {voice}")
+        queue.report(job.id, start + (1 - start) * index / len(choices), f"{backend} / {voice}")
         try:
             device = job.params.get("device") or setting("VOXLIBRIS_DEVICE", "cuda")
             wake(backend, job, queue)
@@ -577,6 +588,59 @@ def run_sample(project: Project, job: Job, queue: Queue) -> None:
         except Exception as error:  # une voix indisponible n'arrête pas la comparaison
             queue.report(job.id, message=f"  échec {backend}/{voice} : {error}")
     queue.report(job.id, 1.0, "échantillons prêts")
+
+
+def run_design(project: Project, job: Job, queue: Queue) -> None:
+    """Invente une voix chez OmniVoice d'après sa description, et la dépose comme extrait
+    à cloner. Le modèle tire une voix nouvelle à chaque appel : c'est l'extrait qui la
+    fixe, et il sert ensuite à OmniVoice comme à ZONOS2, pour tous les livres."""
+    import wave
+
+    import numpy as np
+
+    from .config import voices_dir
+    from .tts.omnivoice import Client, describe_instruct, design_text
+
+    label = str(job.params.get("label") or "").strip()
+    instruct = str(job.params.get("instruct") or "").strip()
+    if not label or not instruct:
+        raise RuntimeError("Il faut un nom pour la voix et au moins un trait.")
+    text = str(job.params.get("text") or "").strip() or design_text(project.language)
+    wake("omnivoice", job, queue)
+    client = Client()
+    client.probe()
+    queue.report(job.id, 0.1, f"voix « {label} » : {describe_instruct(instruct)}")
+    audio, rate = client.design(text, instruct, project.language)
+    # Un nom qui commence par le tiret bas passerait pour un dossier de travail.
+    stem = label.strip("_") or "voix"
+    folder = voices_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    for old in folder.glob(f"{stem}.*"):
+        old.unlink()
+    target = folder / f"{stem}.wav"
+    samples = np.clip(np.asarray(audio, dtype=np.float32), -1.0, 1.0)
+    with wave.open(str(target), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(rate)
+        out.writeframes((samples * 32767).astype("<i2").tobytes())
+    queue.report(
+        job.id,
+        0.3,
+        f"voix « {label} » : {len(samples) / rate:.1f} s déposées dans le dossier des voix",
+    )
+    # Puis au banc, sur le texte du livre : c'est là qu'une voix se juge. Le serveur
+    # nomme la voix d'après son fichier, tirets et soulignés changés en espaces.
+    if not any(project.segments_dir.glob("ch*.jsonl")):
+        queue.report(
+            job.id,
+            1.0,
+            "pas encore de segments : préparez le livre, puis ajoutez-la au banc depuis la "
+            "page Voix. Si elle ne plaît pas, relancez : le modèle en tire une autre.",
+        )
+        return
+    spoken = stem.replace("_", " ").replace("-", " ").strip()
+    bench(project, job, queue, [{"backend": "omnivoice", "voice": spoken}], start=0.3)
 
 
 def run_resynth(project: Project, job: Job, queue: Queue) -> None:
@@ -674,6 +738,7 @@ HANDLERS = {
     "personas": run_personas,
     "synth": run_synth,
     "sample": run_sample,
+    "design": run_design,
     "resynth": run_resynth,
     "assemble": run_assemble,
     "release": run_release,

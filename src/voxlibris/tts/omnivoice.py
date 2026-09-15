@@ -152,6 +152,105 @@ class Client:
             rate = DEFAULT_SAMPLE_RATE
         return decode_pcm(body, rate)
 
+    def design(
+        self, text: str, instruct: str, language: str = "fr", speed: float = 1.0
+    ) -> tuple[np.ndarray, int]:
+        """Une voix inventée d'après `instruct`, lisant `text`. Nouvelle à chaque appel :
+        pour la garder, on enregistre l'extrait et on le clone ensuite."""
+        payload: dict = {"text": text, "instruct": instruct}
+        code = language_code(language)
+        if code:
+            payload["language"] = code
+        if speed != 1.0:
+            payload["speed"] = float(speed)
+        body, headers = self._request("/design", payload)
+        if not body:
+            raise OmnivoiceError("Réponse sans audio.")
+        try:
+            rate = int(headers.get("x-audio-sample-rate", DEFAULT_SAMPLE_RATE))
+        except ValueError:
+            rate = DEFAULT_SAMPLE_RATE
+        return decode_pcm(body, rate)
+
+
+# Ce que le modèle sait d'une voix à inventer : ses étiquettes, et leur nom pour nous.
+# Les accents ne valent que pour l'anglais, les dialectes que pour le chinois : ils ne
+# sont pas proposés.
+DESIGN_TRAITS: dict[str, list[tuple[str, str]]] = {
+    "gender": [("male", "homme"), ("female", "femme")],
+    "age": [
+        ("child", "enfant"),
+        ("teenager", "adolescent"),
+        ("young adult", "jeune adulte"),
+        ("middle-aged", "d'âge mûr"),
+        ("elderly", "âgé"),
+    ],
+    "pitch": [
+        ("very low pitch", "très grave"),
+        ("low pitch", "grave"),
+        ("moderate pitch", "médium"),
+        ("high pitch", "aiguë"),
+        ("very high pitch", "très aiguë"),
+    ],
+    "style": [("whisper", "chuchotée")],
+}
+
+# Ce que la voix inventée lit pour se faire entendre : une douzaine de secondes, de quoi
+# la cloner ensuite. Textes originaux, pour ne devoir rien à personne.
+DESIGN_TEXTS = {
+    "fr": (
+        "Le soir tombait sur le port, et les dernières barques rentraient une à une. "
+        "Sur le quai, une femme attendait sans impatience, les mains dans les poches de "
+        "son manteau, en regardant la lumière décliner sur l'eau."
+    ),
+    "en": (
+        "Evening was settling over the harbour, and the last boats came in one by one. "
+        "On the quay a woman waited without impatience, hands deep in her coat pockets, "
+        "watching the light fade on the water."
+    ),
+    "es": (
+        "Caía la tarde sobre el puerto y las últimas barcas regresaban una a una. En el "
+        "muelle, una mujer esperaba sin impaciencia, con las manos en los bolsillos del "
+        "abrigo, mirando cómo la luz se apagaba sobre el agua."
+    ),
+    "de": (
+        "Der Abend senkte sich über den Hafen, und die letzten Boote kehrten eines nach "
+        "dem anderen zurück. Am Kai wartete eine Frau ohne Ungeduld, die Hände in den "
+        "Manteltaschen, und sah zu, wie das Licht über dem Wasser verblasste."
+    ),
+    "it": (
+        "La sera scendeva sul porto e le ultime barche rientravano una dopo l'altra. Sul "
+        "molo una donna aspettava senza impazienza, le mani nelle tasche del cappotto, "
+        "guardando la luce spegnersi sull'acqua."
+    ),
+}
+
+
+def design_instruct(choices: dict[str, str]) -> str:
+    """La description que le modèle attend, à partir d'un choix par trait ; les traits
+    laissés vides ne pèsent pas. Une valeur inconnue est refusée."""
+    parts = []
+    for trait, options in DESIGN_TRAITS.items():
+        chosen = (choices.get(trait) or "").strip().lower()
+        if not chosen:
+            continue
+        if chosen not in {value for value, _ in options}:
+            raise ValueError(f"Trait inconnu pour {trait} : {chosen!r}")
+        parts.append(chosen)
+    return ", ".join(parts)
+
+
+def design_text(language: str) -> str:
+    return DESIGN_TEXTS.get(language_code(language) or "fr", DESIGN_TEXTS["fr"])
+
+
+def describe_instruct(instruct: str) -> str:
+    """La description en clair, pour l'afficher : « femme, âgée, grave »."""
+    names = {value: label for options in DESIGN_TRAITS.values() for value, label in options}
+    return ", ".join(
+        names.get(part.strip(), part.strip()) for part in instruct.split(",") if part.strip()
+    )
+
 
 def voice_names(client: Client | None = None) -> list[str]:
     """Intitulés des voix du serveur, dans l'ordre du dossier."""

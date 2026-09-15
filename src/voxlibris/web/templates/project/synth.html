@@ -112,8 +112,12 @@
       <div class="field"><span>Moteur</span>
         <div class="seg" id="engine-picker">
           {% for key, e in engines.items() %}
-          <label><input type="radio" name="backend" value="{{ key }}" {% if (project.backend or "xtts") == key %}checked{% endif %}><span>{{ e.label|replace("-v2","")|replace("-82M","")|replace(" TTS","") }}</span></label>
+          <label><input type="radio" name="backend" value="{{ key }}" {% if default_backend == key %}checked{% endif %}><span>{{ e.label|replace("-v2","")|replace("-82M","")|replace(" TTS","") }}</span></label>
           {% endfor %}
+          {# Le moteur retenu par ce livre reste offert, même écarté depuis : rien ne se défait sous les pieds. #}
+          {% if project.backend and project.backend not in engines %}
+          <label title="Écarté dans les Réglages ; ce livre l'a retenu avant"><input type="radio" name="backend" value="{{ project.backend }}" checked><span>{{ (all_engines[project.backend].label if project.backend in all_engines else project.backend)|replace("-v2","")|replace("-82M","")|replace(" TTS","") }} · écarté</span></label>
+          {% endif %}
         </div>
       </div>
       <div class="field" id="cast"><span>Voix</span>
